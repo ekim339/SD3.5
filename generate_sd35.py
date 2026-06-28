@@ -9,6 +9,13 @@ or set one of:
 
     HF_TOKEN=...
     HUGGINGFACE_HUB_TOKEN=...
+
+
+Usage:
+    python3 generate_sd35.py \
+      --prompt "A cinematic photo of a glass greenhouse on a rainy evening" \
+      --seeds 123 456 \
+      --output-dir outputs
 """
 
 from __future__ import annotations
