@@ -12,10 +12,11 @@ or set one of:
 
 
 Usage:
-    python3 generate_sd35.py \
+    CUDA_VISIBLE_DEVICES=0 python3 generate_sd35.py \
       --prompt "A cinematic photo of a glass greenhouse on a rainy evening" \
       --seeds 123 456 \
-      --output-dir outputs
+      --output-dir outputs \
+      --trajectory
 """
 
 from __future__ import annotations

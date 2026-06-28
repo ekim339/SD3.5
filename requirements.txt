@@ -4,3 +4,4 @@ transformers
 accelerate
 sentencepiece
 protobuf
+matplotlib
