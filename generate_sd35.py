@@ -151,12 +151,15 @@ def load_pipeline(torch, StableDiffusion3Pipeline, device: str):
         )
         raise SystemExit(1) from exc
 
+    if device == "cuda":
+        pipe.enable_model_cpu_offload()
+        return pipe
+
     return pipe.to(device)
 
 
-def make_generator(torch, device: str, seed: int):
-    generator_device = device if device == "cuda" else "cpu"
-    return torch.Generator(device=generator_device).manual_seed(seed)
+def make_generator(torch, seed: int):
+    return torch.Generator(device="cpu").manual_seed(seed)
 
 
 def decode_latents_to_pil(torch, pipe, latents):
@@ -193,7 +196,7 @@ def generate_for_seed(torch, pipe, args: argparse.Namespace, output_dir: Path, s
     seed_name = f"seed_{seed}"
     seed_dir = output_dir / seed_name
     final_path = output_dir / f"{seed_name}.png"
-    generator = make_generator(torch, pipe.device.type, seed)
+    generator = make_generator(torch, seed)
 
     generation_kwargs = {
         "prompt": args.prompt,

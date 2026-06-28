@@ -127,6 +127,10 @@ def load_pipeline(torch, StableDiffusion3Pipeline, device: str):
         )
         raise SystemExit(1) from exc
 
+    if device == "cuda":
+        pipe.enable_model_cpu_offload()
+        return pipe
+
     return pipe.to(device)
 
 
