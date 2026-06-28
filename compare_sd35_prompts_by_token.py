@@ -184,6 +184,12 @@ def parse_args() -> argparse.Namespace:
         help="Maximum characters shown for each token label under the bars.",
     )
     parser.add_argument(
+        "--plot-max-tokens",
+        type=int,
+        default=77,
+        help="Maximum token positions shown on the bar plot. Default is 77 for the CLIP text encoders.",
+    )
+    parser.add_argument(
         "--no-t5-device-map",
         action="store_true",
         help="Disable Accelerate device_map='auto' for T5 on CUDA and move it directly to --device.",
@@ -529,6 +535,7 @@ def save_barplot(
     prompt_b: str,
     metric: str,
     token_label_width: int,
+    plot_max_tokens: int,
 ) -> None:
     require_matplotlib()
 
@@ -538,9 +545,10 @@ def save_barplot(
     }
     averaged_rows = rows_by_token_index(build_averaged_rows(results, "normalized"))
     max_sequence_length = max(result["sequence_length"] for result in results.values())
-    token_indices = list(range(max_sequence_length))
+    plotted_sequence_length = min(max_sequence_length, plot_max_tokens)
+    token_indices = list(range(plotted_sequence_length))
 
-    figure_width = max(18, max_sequence_length * 0.16)
+    figure_width = max(18, plotted_sequence_length * 0.16)
     figure, axis = plt.subplots(figsize=(figure_width, 7.8), constrained_layout=False)
 
     series = [
@@ -608,7 +616,8 @@ def save_barplot(
     )
     figure.suptitle(title, fontsize=11, y=0.985)
     figure.supxlabel(
-        "Token position: prompt A token / prompt B token. Labels use T5 when present, otherwise CLIP.",
+        "Token position: prompt A token / prompt B token. Plot is capped to the first "
+        f"{plotted_sequence_length} positions; labels use T5 when present, otherwise CLIP.",
         fontsize=10,
     )
     figure.tight_layout(rect=(0.06, 0.04, 1, 0.92))
@@ -690,6 +699,8 @@ def main() -> None:
         raise ValueError("--max-rows must be greater than 0 when provided.")
     if args.t5_max_sequence_length <= 0:
         raise ValueError("--t5-max-sequence-length must be > 0.")
+    if args.plot_max_tokens <= 0:
+        raise ValueError("--plot-max-tokens must be > 0.")
 
     dtype = dtype_from_name(args.dtype)
     output_path = Path(args.output_txt)
@@ -725,6 +736,7 @@ def main() -> None:
             args.prompt_b,
             metric,
             args.token_label_width,
+            args.plot_max_tokens,
         )
         print(f"Saved prompt token barplot: {plot_path}")
 
