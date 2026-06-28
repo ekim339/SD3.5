@@ -67,6 +67,15 @@ ENCODER_SPECS = {
     },
 }
 
+PLOT_ENCODER_ORDER = ["clip_l", "clip_g", "t5"]
+METRIC_KEYS = [
+    "mean_norm_abs_delta",
+    "mean_abs_delta",
+    "signed_mean_delta",
+    "rms_delta",
+    "max_abs_delta",
+]
+
 
 def require_runtime() -> None:
     """Import heavy dependencies lazily so --help works without loading them."""
@@ -446,17 +455,71 @@ def rows_by_token_index(rows: list[dict]) -> dict[int, dict]:
     return {row["token_index"]: row for row in rows}
 
 
+def sort_key_for_name(sort_by: str) -> str:
+    return {
+        "normalized": "mean_norm_abs_delta",
+        "raw": "mean_abs_delta",
+        "rms": "rms_delta",
+    }[sort_by]
+
+
+def build_averaged_rows(results: dict[str, dict], sort_by: str) -> list[dict]:
+    by_encoder = {
+        name: rows_by_token_index(result["rows"])
+        for name, result in results.items()
+    }
+    max_sequence_length = max(result["sequence_length"] for result in results.values())
+    rows = []
+    for token_index in range(max_sequence_length):
+        available_rows = [
+            by_encoder[name][token_index]
+            for name in PLOT_ENCODER_ORDER
+            if name in by_encoder and token_index in by_encoder[name]
+        ]
+        if not available_rows:
+            continue
+
+        averaged = {
+            "encoder": "averaged",
+            "description": "Averaged encoders",
+            "token_index": token_index,
+            "token_a": "; ".join(
+                f"{ENCODER_SPECS[row['encoder']]['label']}={row['token_a']!r}"
+                for row in available_rows
+            ),
+            "token_b": "; ".join(
+                f"{ENCODER_SPECS[row['encoder']]['label']}={row['token_b']!r}"
+                for row in available_rows
+            ),
+        }
+        for metric in METRIC_KEYS:
+            averaged[metric] = sum(row[metric] for row in available_rows) / len(available_rows)
+        rows.append(averaged)
+
+    rows.sort(key=lambda row: row[sort_key_for_name(sort_by)], reverse=True)
+    return rows
+
+
 def short_token_label(label: str, max_length: int) -> str:
     label = label.replace("\n", "\\n")
     return textwrap.shorten(label, width=max_length, placeholder="...")
 
 
-def barplot_tick_label(index: int, row: dict, max_length: int) -> str:
+def barplot_tick_label(index: int, row: dict | None, max_length: int) -> str:
+    if row is None:
+        return str(index)
     token_a = short_token_label(row["token_a"], max_length=max_length)
     token_b = short_token_label(row["token_b"], max_length=max_length)
     if token_a == token_b:
         return f"{index}:{token_a}"
     return f"{index}:{token_a}/{token_b}"
+
+
+def preferred_label_row(index: int, rows_by_encoder: dict[str, dict[int, dict]]) -> dict | None:
+    for encoder_name in ("t5", "clip_l", "clip_g"):
+        if index in rows_by_encoder.get(encoder_name, {}):
+            return rows_by_encoder[encoder_name][index]
+    return None
 
 
 def save_barplot(
@@ -469,41 +532,54 @@ def save_barplot(
 ) -> None:
     require_matplotlib()
 
-    n_panels = len(results)
-    figure_width = max(
-        18,
-        max(result["sequence_length"] for result in results.values()) * 0.12,
-    )
-    figure_height = max(5.5, 3.2 * n_panels)
-    figure, axes = plt.subplots(
-        n_panels,
-        1,
-        figsize=(figure_width, figure_height),
-        sharey=False,
-        constrained_layout=False,
-    )
-    if n_panels == 1:
-        axes = [axes]
+    rows_by_encoder = {
+        name: rows_by_token_index(result["rows"])
+        for name, result in results.items()
+    }
+    averaged_rows = rows_by_token_index(build_averaged_rows(results, "normalized"))
+    max_sequence_length = max(result["sequence_length"] for result in results.values())
+    token_indices = list(range(max_sequence_length))
 
-    for axis, result in zip(axes, results.values()):
-        by_index = rows_by_token_index(result["rows"])
-        token_indices = list(range(result["sequence_length"]))
-        values = [by_index[index][metric] for index in token_indices]
-        tick_labels = [
-            barplot_tick_label(index, by_index[index], token_label_width)
-            for index in token_indices
-        ]
-        axis.bar(token_indices, values, color="#4C78A8")
-        axis.set_title(
-            f"{result['label']} ({result['channels']} channels)",
-            loc="left",
-            fontsize=12,
-            fontweight="bold",
+    figure_width = max(18, max_sequence_length * 0.16)
+    figure, axis = plt.subplots(figsize=(figure_width, 7.8), constrained_layout=False)
+
+    series = [
+        ("clip_l", "CLIP-L", "#4C78A8"),
+        ("clip_g", "CLIP-G", "#F58518"),
+        ("t5", "T5-XXL", "#54A24B"),
+        ("averaged", "Averaged", "#B279A2"),
+    ]
+    width = 0.2
+    offsets = [-1.5 * width, -0.5 * width, 0.5 * width, 1.5 * width]
+    for (series_name, series_label, color), offset in zip(series, offsets):
+        values = []
+        for index in token_indices:
+            if series_name == "averaged":
+                row = averaged_rows.get(index)
+            else:
+                row = rows_by_encoder.get(series_name, {}).get(index)
+            values.append(row[metric] if row is not None else float("nan"))
+        axis.bar(
+            [index + offset for index in token_indices],
+            values,
+            width=width,
+            label=series_label,
+            color=color,
         )
-        axis.set_xticks(token_indices)
-        axis.set_xticklabels(tick_labels, rotation=90, fontsize=5)
-        axis.grid(axis="y", alpha=0.25)
-        axis.margins(x=0.005)
+
+    tick_labels = [
+        barplot_tick_label(
+            index,
+            preferred_label_row(index, rows_by_encoder),
+            token_label_width,
+        )
+        for index in token_indices
+    ]
+    axis.set_xticks(token_indices)
+    axis.set_xticklabels(tick_labels, rotation=90, fontsize=5)
+    axis.grid(axis="y", alpha=0.25)
+    axis.margins(x=0.005)
+    axis.legend(ncol=4, loc="upper right")
 
     output_title = output_path.stem
     figure.text(
@@ -531,7 +607,10 @@ def save_barplot(
         f"Prompt B: {textwrap.shorten(prompt_b, width=150, placeholder='...')}"
     )
     figure.suptitle(title, fontsize=11, y=0.985)
-    figure.supxlabel("Token position: prompt A token / prompt B token", fontsize=10)
+    figure.supxlabel(
+        "Token position: prompt A token / prompt B token. Labels use T5 when present, otherwise CLIP.",
+        fontsize=10,
+    )
     figure.tight_layout(rect=(0.06, 0.04, 1, 0.92))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(output_path, dpi=200)
@@ -571,6 +650,8 @@ def write_report(
             f"  {result['name']}: {result['label']}, "
             f"{result['channels']} channels, {result['sequence_length']} tokens"
         )
+    averaged_rows = build_averaged_rows(results, args.sort_by)
+    lines.append("  averaged: arithmetic mean across available encoder scores for each token index")
     lines.append("")
 
     for result in results.values():
@@ -589,6 +670,12 @@ def write_report(
         lines.append("=" * 120)
         lines.extend(format_table(result["rows"], args.max_rows))
         lines.append("")
+
+    lines.append("=" * 120)
+    lines.append(f"Averaged encoders: tokens sorted by {args.sort_by} change")
+    lines.append("=" * 120)
+    lines.extend(format_table(averaged_rows, args.max_rows))
+    lines.append("")
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text("\n".join(lines), encoding="utf-8")
