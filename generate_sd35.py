@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate images with Stable Diffusion 3.5 Large.
+"""Generate images with Stable Diffusion 3.5 Medium.
 
 Before running, accept the model terms on Hugging Face and authenticate:
 
@@ -22,17 +22,19 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 
-MODEL_ID = "stabilityai/stable-diffusion-3.5-large"
+MODEL_ID = "stabilityai/stable-diffusion-3.5-medium"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate images with Stable Diffusion 3.5 Large."
+        description="Generate images with Stable Diffusion 3.5 Medium."
     )
     parser.add_argument(
         "--prompt",
@@ -55,6 +57,11 @@ def parse_args() -> argparse.Namespace:
         "--output-dir",
         default="outputs",
         help="Directory where generated images are saved.",
+    )
+    parser.add_argument(
+        "--metadata-file",
+        default="metadata.json",
+        help="Metadata filename written inside output-dir before generation starts.",
     )
     parser.add_argument(
         "--trajectory",
@@ -134,6 +141,47 @@ def choose_dtype(torch, device: str):
     if device == "mps":
         return torch.float16
     return torch.float32
+
+
+def dtype_name(torch, device: str) -> str:
+    dtype = choose_dtype(torch, device)
+    if dtype == torch.bfloat16:
+        return "bfloat16"
+    if dtype == torch.float16:
+        return "float16"
+    if dtype == torch.float32:
+        return "float32"
+    return str(dtype)
+
+
+def write_metadata(args: argparse.Namespace, output_dir: Path, device: str, dtype: str) -> Path:
+    metadata_path = output_dir / args.metadata_file
+    metadata_path.parent.mkdir(parents=True, exist_ok=True)
+    metadata = {
+        "created_at_utc": datetime.now(timezone.utc).isoformat(),
+        "model_id": MODEL_ID,
+        "prompt": args.prompt,
+        "negative_prompt": args.negative_prompt,
+        "seeds": args.seeds,
+        "output_dir": str(output_dir),
+        "trajectory": args.trajectory,
+        "device": device,
+        "requested_device": args.device,
+        "dtype": dtype,
+        "steps": args.steps,
+        "guidance_scale": args.guidance_scale,
+        "width": args.width,
+        "height": args.height,
+        "metadata_file": args.metadata_file,
+        "output_files": [
+            str(Path(f"seed_{seed}") / "final.png")
+            if args.trajectory else f"seed_{seed}.png"
+            for seed in args.seeds
+        ],
+    }
+    metadata_path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
+    print(f"Saved metadata: {metadata_path}")
+    return metadata_path
 
 
 def load_pipeline(torch, StableDiffusion3Pipeline, device: str):
@@ -240,6 +288,7 @@ def main() -> None:
 
     torch, StableDiffusion3Pipeline = import_dependencies()
     device = choose_device(torch, args.device)
+    write_metadata(args, output_dir, device, dtype_name(torch, device))
     pipe = load_pipeline(torch, StableDiffusion3Pipeline, device)
 
     for seed in args.seeds:

@@ -13,15 +13,14 @@ For each token position it reports:
     rms_delta           = sqrt(mean((value_b - value_a)^2))
 
 The companion bar plot writes each token under its bar. To keep memory lower for
-SD3.5 Large, the encoders are loaded, compared, and released one at a time.
+SD3.5 Medium, the encoders are loaded, compared, and released one at a time.
 
 Usage:
     python3 compare_sd35_prompts_by_token.py \
       --device cuda:0 \
-      --encoders clip_l clip_g \
-      --prompt-a "..." \
-      --prompt-b "..." \
-      --output-txt text_encoder_inspection/clip_only.txt
+      --prompt-a "A bathroom mat that says 'hello' in bold capital letters, photorealistic" \
+      --prompt-b "A bathroom mat that says 'hi' in bold capital letters, photorealistic" \
+      --output-txt text_encoder_analysis/hello_vs_hi.txt
 """
 
 from __future__ import annotations
@@ -33,7 +32,7 @@ import textwrap
 from pathlib import Path
 
 
-MODEL_ID = "stabilityai/stable-diffusion-3.5-large"
+MODEL_ID = "stabilityai/stable-diffusion-3.5-medium"
 
 torch = None
 CLIPTextModelWithProjection = None

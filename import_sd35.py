@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Load Stable Diffusion 3.5 Large from Hugging Face.
+"""Load Stable Diffusion 3.5 Medium from Hugging Face.
 
 Before running, accept the model terms on Hugging Face and authenticate:
 
@@ -19,12 +19,12 @@ import sys
 from pathlib import Path
 
 
-MODEL_ID = "stabilityai/stable-diffusion-3.5-large"
+MODEL_ID = "stabilityai/stable-diffusion-3.5-medium"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Import/load Stable Diffusion 3.5 Large with Diffusers."
+        description="Import/load Stable Diffusion 3.5 Medium with Diffusers."
     )
     parser.add_argument(
         "--prompt",
@@ -140,7 +140,7 @@ def main() -> None:
     device = choose_device(torch, args.device)
     pipe = load_pipeline(torch, StableDiffusion3Pipeline, device)
 
-    print("Stable Diffusion 3.5 Large imported successfully.")
+    print("Stable Diffusion 3.5 Medium imported successfully.")
 
     if not args.generate:
         return
