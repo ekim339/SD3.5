@@ -12,9 +12,9 @@ Masking is done at the prompt embedding level:
 
 CUDA_VISIBLE_DEVICES=0 python3 generate_sd35_mask_text_encoders.py \
   --device cuda \
-  --prompt "A cinematic photo of a glass greenhouse on a rainy evening" \
-  --seeds 123 456 \
-  --output-dir outputs/masked_greenhouse
+  --prompt "A bathroom mat that says 'hello' in bold capital letters, photorealistic" \
+  --seeds 0 1 2 3 4 5 6 7 8 9 \
+  --output-dir outputs/masked_encoders
 """
 
 from __future__ import annotations
@@ -337,14 +337,27 @@ def load_label_font(ImageFont, image_width: int):
     return ImageFont.load_default()
 
 
-def draw_centered_label(draw, box_width: int, y: int, label: str, font) -> None:
+def draw_centered_label(
+    draw,
+    x: int,
+    y: int,
+    box_width: int,
+    box_height: int,
+    label: str,
+    font,
+) -> None:
     try:
         bbox = draw.textbbox((0, 0), label, font=font)
         text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+        y_offset = bbox[1]
     except AttributeError:
         text_width = draw.textlength(label, font=font)
-    x = (box_width - text_width) / 2
-    draw.text((x, y), label, fill=(20, 20, 20), font=font)
+        text_height = 0
+        y_offset = 0
+    text_x = x + (box_width - text_width) / 2
+    text_y = y + max(0, (box_height - text_height) / 2) - y_offset
+    draw.text((text_x, text_y), label, fill=(20, 20, 20), font=font)
 
 
 def make_collage(condition_images: dict):
@@ -376,8 +389,10 @@ def make_collage(condition_images: dict):
         x, y = positions[condition]
         draw_centered_label(
             draw,
+            x,
+            y,
             image_width,
-            y + max(4, padding // 2),
+            label_height,
             labels[condition],
             font,
         )
