@@ -3,8 +3,9 @@
 
 The output plot has two panels:
 
-    1. CLIP-L, CLIP-G, and their average
-    2. T5-XXL
+    1. CLIP-L
+    2. CLIP-G
+    3. T5-XXL
 
 Each panel uses x-axis labels from its own tokenizer.
 
@@ -359,42 +360,20 @@ def preferred_label_row(
     return None
 
 
-def average_rows_for_encoders(
-    rows_by_encoder: dict[str, dict[int, dict]],
-    encoder_names: list[str],
+def plot_encoder_series(
+    axis,
+    token_indices: list[int],
+    rows_by_encoder,
+    encoder_name: str,
+    label: str,
+    color: str,
     metric: str,
-    token_index: int,
-) -> float:
-    values = [
-        rows_by_encoder[name][token_index][metric]
-        for name in encoder_names
-        if name in rows_by_encoder and token_index in rows_by_encoder[name]
-    ]
-    if not values:
-        return float("nan")
-    return sum(values) / len(values)
-
-
-def plot_grouped_series(axis, token_indices: list[int], rows_by_encoder, series, metric: str) -> None:
-    width = 0.78 / len(series)
-    center_offset = (len(series) - 1) / 2
-    for series_index, (series_name, series_label, color, encoder_names) in enumerate(series):
-        offset = (series_index - center_offset) * width
-        values = []
-        for index in token_indices:
-            if encoder_names is not None:
-                value = average_rows_for_encoders(rows_by_encoder, encoder_names, metric, index)
-            else:
-                row = rows_by_encoder.get(series_name, {}).get(index)
-                value = row[metric] if row is not None else float("nan")
-            values.append(value)
-        axis.bar(
-            [index + offset for index in token_indices],
-            values,
-            width=width,
-            label=series_label,
-            color=color,
-        )
+) -> None:
+    values = []
+    for index in token_indices:
+        row = rows_by_encoder.get(encoder_name, {}).get(index)
+        values.append(row[metric] if row is not None else float("nan"))
+    axis.bar(token_indices, values, width=0.8, label=label, color=color)
 
 
 def save_barplot(
@@ -417,28 +396,29 @@ def save_barplot(
 
     figure_width = max(18, plotted_sequence_length * 0.18)
     figure, axes = plt.subplots(
-        2,
+        3,
         1,
-        figsize=(figure_width, 10.0),
+        figsize=(figure_width, 13.0),
         sharex=False,
         constrained_layout=False,
     )
 
-    clip_series = [
-        ("clip_l", "CLIP-L", "#4C78A8", None),
-        ("clip_g", "CLIP-G", "#F58518", None),
-        ("clip_average", "CLIP average", "#B279A2", ["clip_l", "clip_g"]),
-    ]
-    t5_series = [
-        ("t5", "T5-XXL", "#54A24B", None),
-    ]
-    plot_grouped_series(axes[0], token_indices, rows_by_encoder, clip_series, metric)
-    plot_grouped_series(axes[1], token_indices, rows_by_encoder, t5_series, metric)
+    plot_encoder_series(axes[0], token_indices, rows_by_encoder, "clip_l", "CLIP-L", "#4C78A8", metric)
+    plot_encoder_series(axes[1], token_indices, rows_by_encoder, "clip_g", "CLIP-G", "#F58518", metric)
+    plot_encoder_series(axes[2], token_indices, rows_by_encoder, "t5", "T5-XXL", "#54A24B", metric)
 
-    clip_tick_labels = [
+    clip_l_tick_labels = [
         barplot_tick_label(
             index,
-            preferred_label_row(index, rows_by_encoder, ("clip_l", "clip_g")),
+            preferred_label_row(index, rows_by_encoder, ("clip_l",)),
+            token_label_width,
+        )
+        for index in token_indices
+    ]
+    clip_g_tick_labels = [
+        barplot_tick_label(
+            index,
+            preferred_label_row(index, rows_by_encoder, ("clip_g",)),
             token_label_width,
         )
         for index in token_indices
@@ -452,15 +432,17 @@ def save_barplot(
         for index in token_indices
     ]
 
-    axes[0].set_title("CLIP token signal", loc="left", fontsize=12, fontweight="bold")
-    axes[1].set_title("T5 token signal", loc="left", fontsize=12, fontweight="bold")
+    axes[0].set_title("CLIP-L token signal", loc="left", fontsize=12, fontweight="bold")
+    axes[1].set_title("CLIP-G token signal", loc="left", fontsize=12, fontweight="bold")
+    axes[2].set_title("T5 token signal", loc="left", fontsize=12, fontweight="bold")
     for axis in axes:
         axis.grid(axis="y", alpha=0.25)
         axis.margins(x=0.005)
         axis.legend(loc="upper right")
         axis.set_xticks(token_indices)
-    axes[0].set_xticklabels(clip_tick_labels, rotation=90, fontsize=5)
-    axes[1].set_xticklabels(t5_tick_labels, rotation=90, fontsize=5)
+    axes[0].set_xticklabels(clip_l_tick_labels, rotation=90, fontsize=5)
+    axes[1].set_xticklabels(clip_g_tick_labels, rotation=90, fontsize=5)
+    axes[2].set_xticklabels(t5_tick_labels, rotation=90, fontsize=5)
 
     output_title = output_path.stem
     figure.text(
@@ -488,7 +470,7 @@ def save_barplot(
     )
     figure.suptitle(title, fontsize=11, y=0.985)
     figure.supxlabel(
-        "Token position. Top axis uses CLIP tokens and bottom axis uses T5 tokens.",
+        "Token position. Each axis uses labels from its own tokenizer.",
         fontsize=10,
     )
     figure.tight_layout(rect=(0.06, 0.05, 1, 0.92))
