@@ -125,10 +125,16 @@ def parse_args() -> argparse.Namespace:
         help="Maximum token length for the T5 text encoder.",
     )
     parser.add_argument(
-        "--plot-max-tokens",
+        "--clip-plot-max-tokens",
         type=int,
         default=77,
-        help="Maximum token positions shown on the bar plot.",
+        help="Maximum token positions shown on the CLIP bar plots.",
+    )
+    parser.add_argument(
+        "--t5-plot-max-tokens",
+        type=int,
+        default=256,
+        help="Maximum token positions shown on the T5 bar plot.",
     )
     parser.add_argument(
         "--score",
@@ -382,7 +388,8 @@ def save_barplot(
     prompt: str,
     metric: str,
     token_label_width: int,
-    plot_max_tokens: int,
+    clip_plot_max_tokens: int,
+    t5_plot_max_tokens: int,
 ) -> None:
     require_matplotlib()
 
@@ -390,11 +397,18 @@ def save_barplot(
         name: rows_by_token_index(result["rows"])
         for name, result in results.items()
     }
-    max_sequence_length = max(result["sequence_length"] for result in results.values())
-    plotted_sequence_length = min(max_sequence_length, plot_max_tokens)
-    token_indices = list(range(plotted_sequence_length))
+    clip_sequence_length = max(
+        results[name]["sequence_length"]
+        for name in ("clip_l", "clip_g")
+        if name in results
+    )
+    t5_sequence_length = results["t5"]["sequence_length"]
+    clip_plotted_sequence_length = min(clip_sequence_length, clip_plot_max_tokens)
+    t5_plotted_sequence_length = min(t5_sequence_length, t5_plot_max_tokens)
+    clip_token_indices = list(range(clip_plotted_sequence_length))
+    t5_token_indices = list(range(t5_plotted_sequence_length))
 
-    figure_width = max(18, plotted_sequence_length * 0.18)
+    figure_width = max(18, t5_plotted_sequence_length * 0.12)
     figure, axes = plt.subplots(
         3,
         1,
@@ -403,9 +417,9 @@ def save_barplot(
         constrained_layout=False,
     )
 
-    plot_encoder_series(axes[0], token_indices, rows_by_encoder, "clip_l", "CLIP-L", "#4C78A8", metric)
-    plot_encoder_series(axes[1], token_indices, rows_by_encoder, "clip_g", "CLIP-G", "#F58518", metric)
-    plot_encoder_series(axes[2], token_indices, rows_by_encoder, "t5", "T5-XXL", "#54A24B", metric)
+    plot_encoder_series(axes[0], clip_token_indices, rows_by_encoder, "clip_l", "CLIP-L", "#4C78A8", metric)
+    plot_encoder_series(axes[1], clip_token_indices, rows_by_encoder, "clip_g", "CLIP-G", "#F58518", metric)
+    plot_encoder_series(axes[2], t5_token_indices, rows_by_encoder, "t5", "T5-XXL", "#54A24B", metric)
 
     clip_l_tick_labels = [
         barplot_tick_label(
@@ -413,7 +427,7 @@ def save_barplot(
             preferred_label_row(index, rows_by_encoder, ("clip_l",)),
             token_label_width,
         )
-        for index in token_indices
+        for index in clip_token_indices
     ]
     clip_g_tick_labels = [
         barplot_tick_label(
@@ -421,7 +435,7 @@ def save_barplot(
             preferred_label_row(index, rows_by_encoder, ("clip_g",)),
             token_label_width,
         )
-        for index in token_indices
+        for index in clip_token_indices
     ]
     t5_tick_labels = [
         barplot_tick_label(
@@ -429,7 +443,7 @@ def save_barplot(
             preferred_label_row(index, rows_by_encoder, ("t5",)),
             token_label_width,
         )
-        for index in token_indices
+        for index in t5_token_indices
     ]
 
     axes[0].set_title("CLIP-L token signal", loc="left", fontsize=12, fontweight="bold")
@@ -439,7 +453,9 @@ def save_barplot(
         axis.grid(axis="y", alpha=0.25)
         axis.margins(x=0.005)
         axis.legend(loc="upper right")
-        axis.set_xticks(token_indices)
+    axes[0].set_xticks(clip_token_indices)
+    axes[1].set_xticks(clip_token_indices)
+    axes[2].set_xticks(t5_token_indices)
     axes[0].set_xticklabels(clip_l_tick_labels, rotation=90, fontsize=5)
     axes[1].set_xticklabels(clip_g_tick_labels, rotation=90, fontsize=5)
     axes[2].set_xticklabels(t5_tick_labels, rotation=90, fontsize=5)
@@ -470,7 +486,9 @@ def save_barplot(
     )
     figure.suptitle(title, fontsize=11, y=0.985)
     figure.supxlabel(
-        "Token position. Each axis uses labels from its own tokenizer.",
+        "Token position. CLIP panels show "
+        f"{clip_plotted_sequence_length} positions; T5 panel shows "
+        f"{t5_plotted_sequence_length} positions.",
         fontsize=10,
     )
     figure.tight_layout(rect=(0.06, 0.05, 1, 0.92))
@@ -484,8 +502,10 @@ def main() -> None:
     require_runtime()
     if args.t5_max_sequence_length <= 0:
         raise ValueError("--t5-max-sequence-length must be > 0.")
-    if args.plot_max_tokens <= 0:
-        raise ValueError("--plot-max-tokens must be > 0.")
+    if args.clip_plot_max_tokens <= 0:
+        raise ValueError("--clip-plot-max-tokens must be > 0.")
+    if args.t5_plot_max_tokens <= 0:
+        raise ValueError("--t5-plot-max-tokens must be > 0.")
 
     dtype = dtype_from_name(args.dtype)
     metric = score_key_from_name(args.score)
@@ -508,7 +528,8 @@ def main() -> None:
         args.prompt,
         metric,
         args.token_label_width,
-        args.plot_max_tokens,
+        args.clip_plot_max_tokens,
+        args.t5_plot_max_tokens,
     )
     print(f"Saved prompt token signal barplot: {args.output_plot}")
 
