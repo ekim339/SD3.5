@@ -337,6 +337,43 @@ def load_label_font(ImageFont, image_width: int):
     return ImageFont.load_default()
 
 
+def load_prompt_font(ImageFont, image_width: int):
+    font_size = max(20, image_width // 36)
+    for font_path in (
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ):
+        try:
+            return ImageFont.truetype(font_path, font_size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def text_dimensions(draw, text: str, font) -> tuple[int, int, int]:
+    try:
+        bbox = draw.textbbox((0, 0), text, font=font)
+        return bbox[2] - bbox[0], bbox[3] - bbox[1], bbox[1]
+    except AttributeError:
+        return int(draw.textlength(text, font=font)), 0, 0
+
+
+def wrap_text_to_width(draw, text: str, font, max_width: int) -> list[str]:
+    lines = []
+    for paragraph in text.splitlines() or [""]:
+        current = ""
+        for word in paragraph.split():
+            candidate = f"{current} {word}".strip()
+            width, _, _ = text_dimensions(draw, candidate, font)
+            if current and width > max_width:
+                lines.append(current)
+                current = word
+            else:
+                current = candidate
+        lines.append(current)
+    return lines
+
+
 def draw_centered_label(
     draw,
     x: int,
@@ -346,37 +383,60 @@ def draw_centered_label(
     label: str,
     font,
 ) -> None:
-    try:
-        bbox = draw.textbbox((0, 0), label, font=font)
-        text_width = bbox[2] - bbox[0]
-        text_height = bbox[3] - bbox[1]
-        y_offset = bbox[1]
-    except AttributeError:
-        text_width = draw.textlength(label, font=font)
-        text_height = 0
-        y_offset = 0
+    text_width, text_height, y_offset = text_dimensions(draw, label, font)
     text_x = x + (box_width - text_width) / 2
     text_y = y + max(0, (box_height - text_height) / 2) - y_offset
     draw.text((text_x, text_y), label, fill=(20, 20, 20), font=font)
 
 
-def make_collage(condition_images: dict):
+def draw_prompt_header(draw, prompt: str, x: int, y: int, width: int, font, line_height: int) -> int:
+    prompt_text = f"Prompt: {prompt}"
+    lines = wrap_text_to_width(draw, prompt_text, font, width)
+    for line_index, line in enumerate(lines):
+        text_width, _, y_offset = text_dimensions(draw, line, font)
+        text_x = x + (width - text_width) / 2
+        text_y = y + line_index * line_height - y_offset
+        draw.text((text_x, text_y), line, fill=(20, 20, 20), font=font)
+    return len(lines)
+
+
+def make_collage(condition_images: dict, prompt: str):
     Image, ImageDraw, ImageFont = require_pillow()
     images = [condition_images[condition].convert("RGB") for condition in CONDITIONS]
     image_width, image_height = images[0].size
     label_height = max(48, image_height // 14)
     padding = max(12, image_width // 80)
     collage_width = image_width * 2 + padding * 3
-    collage_height = (image_height + label_height) * 2 + padding * 3
+    prompt_font = load_prompt_font(ImageFont, image_width)
+    scratch = Image.new("RGB", (collage_width, 1), "white")
+    scratch_draw = ImageDraw.Draw(scratch)
+    prompt_line_height = max(28, image_height // 32)
+    prompt_lines = wrap_text_to_width(
+        scratch_draw,
+        f"Prompt: {prompt}",
+        prompt_font,
+        collage_width - padding * 2,
+    )
+    prompt_height = prompt_line_height * len(prompt_lines) + padding
+    collage_height = prompt_height + (image_height + label_height) * 2 + padding * 3
     collage = Image.new("RGB", (collage_width, collage_height), "white")
     draw = ImageDraw.Draw(collage)
     font = load_label_font(ImageFont, image_width)
+    draw_prompt_header(
+        draw,
+        prompt,
+        padding,
+        padding,
+        collage_width - padding * 2,
+        prompt_font,
+        prompt_line_height,
+    )
 
     positions = {
-        "original": (padding, padding),
-        "clip-l": (image_width + padding * 2, padding),
-        "clip-g": (padding, image_height + label_height + padding * 2),
-        "t5": (image_width + padding * 2, image_height + label_height + padding * 2),
+        "original": (padding, prompt_height + padding),
+        "clip-l": (image_width + padding * 2, prompt_height + padding),
+        "clip-g": (padding, prompt_height + image_height + label_height + padding * 2),
+        "t5": (image_width + padding * 2, prompt_height + image_height + label_height + padding * 2),
     }
     labels = {
         "original": "original",
@@ -421,7 +481,7 @@ def generate_collage_for_seed(
         )
 
     output_path = output_dir / f"seed_{seed}_collage.png"
-    collage = make_collage(condition_images)
+    collage = make_collage(condition_images, args.prompt)
     collage.save(output_path)
     print(f"Saved collage {output_path}")
 
