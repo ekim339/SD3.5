@@ -127,7 +127,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--clip-plot-max-tokens",
         type=int,
-        default=256,
+        default=77,
         help="Maximum token positions shown on the CLIP bar plots.",
     )
     parser.add_argument(
