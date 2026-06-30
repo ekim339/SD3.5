@@ -185,8 +185,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--plot-max-tokens",
         type=int,
-        default=77,
-        help="Maximum token positions shown on the bar plot. Default is 77 for the CLIP text encoders.",
+        default=256,
+        help="Maximum token positions shown on the bar plot. Default is 256 for the T5 text encoder.",
     )
     parser.add_argument(
         "--no-t5-device-map",
@@ -615,7 +615,7 @@ def save_barplot(
     )
     figure.suptitle(title, fontsize=11, y=0.985)
     figure.supxlabel(
-        "Token position: prompt A token / prompt B token. Plot is capped to the first "
+        "Token position: prompt A token / prompt B token. Plot shows the first "
         f"{plotted_sequence_length} positions; labels use T5 when present, otherwise CLIP.",
         fontsize=10,
     )
