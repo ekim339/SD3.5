@@ -127,7 +127,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--clip-plot-max-tokens",
         type=int,
-        default=77,
+        default=256,
         help="Maximum token positions shown on the CLIP bar plots.",
     )
     parser.add_argument(
@@ -397,14 +397,8 @@ def save_barplot(
         name: rows_by_token_index(result["rows"])
         for name, result in results.items()
     }
-    clip_sequence_length = max(
-        results[name]["sequence_length"]
-        for name in ("clip_l", "clip_g")
-        if name in results
-    )
-    t5_sequence_length = results["t5"]["sequence_length"]
-    clip_plotted_sequence_length = min(clip_sequence_length, clip_plot_max_tokens)
-    t5_plotted_sequence_length = min(t5_sequence_length, t5_plot_max_tokens)
+    clip_plotted_sequence_length = clip_plot_max_tokens
+    t5_plotted_sequence_length = t5_plot_max_tokens
     clip_token_indices = list(range(clip_plotted_sequence_length))
     t5_token_indices = list(range(t5_plotted_sequence_length))
 
