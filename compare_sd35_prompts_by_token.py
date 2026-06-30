@@ -185,8 +185,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--plot-max-tokens",
         type=int,
-        default=256,
-        help="Maximum token positions shown on the bar plot. Default is 256 for the T5 text encoder.",
+        default=77,
+        help="Maximum token positions shown on the bar plot. Default is 77 for the CLIP text encoders.",
     )
     parser.add_argument(
         "--no-t5-device-map",
@@ -527,6 +527,44 @@ def preferred_label_row(index: int, rows_by_encoder: dict[str, dict[int, dict]])
     return None
 
 
+def average_rows_for_encoders(
+    rows_by_encoder: dict[str, dict[int, dict]],
+    encoder_names: list[str],
+    metric: str,
+    token_index: int,
+) -> float:
+    values = [
+        rows_by_encoder[name][token_index][metric]
+        for name in encoder_names
+        if name in rows_by_encoder and token_index in rows_by_encoder[name]
+    ]
+    if not values:
+        return float("nan")
+    return sum(values) / len(values)
+
+
+def plot_grouped_series(axis, token_indices: list[int], rows_by_encoder, series, metric: str) -> None:
+    width = 0.78 / len(series)
+    center_offset = (len(series) - 1) / 2
+    for series_index, (series_name, series_label, color, encoder_names) in enumerate(series):
+        offset = (series_index - center_offset) * width
+        values = []
+        for index in token_indices:
+            if encoder_names is not None:
+                value = average_rows_for_encoders(rows_by_encoder, encoder_names, metric, index)
+            else:
+                row = rows_by_encoder.get(series_name, {}).get(index)
+                value = row[metric] if row is not None else float("nan")
+            values.append(value)
+        axis.bar(
+            [index + offset for index in token_indices],
+            values,
+            width=width,
+            label=series_label,
+            color=color,
+        )
+
+
 def save_barplot(
     results: dict[str, dict],
     output_path: Path,
@@ -542,37 +580,29 @@ def save_barplot(
         name: rows_by_token_index(result["rows"])
         for name, result in results.items()
     }
-    averaged_rows = rows_by_token_index(build_averaged_rows(results, "normalized"))
     max_sequence_length = max(result["sequence_length"] for result in results.values())
     plotted_sequence_length = min(max_sequence_length, plot_max_tokens)
     token_indices = list(range(plotted_sequence_length))
 
-    figure_width = max(18, plotted_sequence_length * 0.16)
-    figure, axis = plt.subplots(figsize=(figure_width, 7.8), constrained_layout=False)
+    figure_width = max(18, plotted_sequence_length * 0.18)
+    figure, axes = plt.subplots(
+        2,
+        1,
+        figsize=(figure_width, 10.0),
+        sharex=True,
+        constrained_layout=False,
+    )
 
-    series = [
-        ("clip_l", "CLIP-L", "#4C78A8"),
-        ("clip_g", "CLIP-G", "#F58518"),
-        ("t5", "T5-XXL", "#54A24B"),
-        ("averaged", "Averaged", "#B279A2"),
+    clip_series = [
+        ("clip_l", "CLIP-L", "#4C78A8", None),
+        ("clip_g", "CLIP-G", "#F58518", None),
+        ("clip_average", "CLIP average", "#B279A2", ["clip_l", "clip_g"]),
     ]
-    width = 0.2
-    offsets = [-1.5 * width, -0.5 * width, 0.5 * width, 1.5 * width]
-    for (series_name, series_label, color), offset in zip(series, offsets):
-        values = []
-        for index in token_indices:
-            if series_name == "averaged":
-                row = averaged_rows.get(index)
-            else:
-                row = rows_by_encoder.get(series_name, {}).get(index)
-            values.append(row[metric] if row is not None else float("nan"))
-        axis.bar(
-            [index + offset for index in token_indices],
-            values,
-            width=width,
-            label=series_label,
-            color=color,
-        )
+    t5_series = [
+        ("t5", "T5-XXL", "#54A24B", None),
+    ]
+    plot_grouped_series(axes[0], token_indices, rows_by_encoder, clip_series, metric)
+    plot_grouped_series(axes[1], token_indices, rows_by_encoder, t5_series, metric)
 
     tick_labels = [
         barplot_tick_label(
@@ -582,11 +612,14 @@ def save_barplot(
         )
         for index in token_indices
     ]
-    axis.set_xticks(token_indices)
-    axis.set_xticklabels(tick_labels, rotation=90, fontsize=5)
-    axis.grid(axis="y", alpha=0.25)
-    axis.margins(x=0.005)
-    axis.legend(ncol=4, loc="upper right")
+    axes[0].set_title("CLIP encoders", loc="left", fontsize=12, fontweight="bold")
+    axes[1].set_title("T5 encoder", loc="left", fontsize=12, fontweight="bold")
+    for axis in axes:
+        axis.grid(axis="y", alpha=0.25)
+        axis.margins(x=0.005)
+        axis.legend(loc="upper right")
+    axes[1].set_xticks(token_indices)
+    axes[1].set_xticklabels(tick_labels, rotation=90, fontsize=5)
 
     output_title = output_path.stem
     figure.text(
@@ -619,7 +652,7 @@ def save_barplot(
         f"{plotted_sequence_length} positions; labels use T5 when present, otherwise CLIP.",
         fontsize=10,
     )
-    figure.tight_layout(rect=(0.06, 0.04, 1, 0.92))
+    figure.tight_layout(rect=(0.06, 0.05, 1, 0.92))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(output_path, dpi=200)
     plt.close(figure)
