@@ -8,6 +8,15 @@ where present:
     - T5 token row index i in prompt_embeds[:, 77 + i, :]
 
 The pooled CLIP embeddings are not modified because they are not token-specific.
+
+Usage:
+  CUDA_VISIBLE_DEVICES=0 python3 generate_sd35_amplify_tokens.py \
+  --device cuda \
+  --prompt "A cinematic photo of a glass greenhouse on a rainy evening" \
+  --seeds 123 456 \
+  --tokens 4 5 6 \
+  --multiple 2 \
+  --output-dir outputs/amplified_greenhouse
 """
 
 from __future__ import annotations

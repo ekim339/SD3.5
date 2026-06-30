@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 """Generate SD3.5 images while masking one text encoder at a time.
 
-For each seed, this writes images into:
+For each seed, this writes one collage containing:
 
-    original/
-    clip-l/
-    clip-g/
-    t5/
+    original, clip-l, clip-g, t5
 
 Masking is done at the prompt embedding level:
     - clip-l: zero CLIP-L channels in token positions 0..76 and pooled channels 0..767
     - clip-g: zero CLIP-G channels in token positions 0..76 and pooled channels 768..2047
     - t5: zero T5 token positions after the 77 CLIP positions
+
+CUDA_VISIBLE_DEVICES=0 python3 generate_sd35_mask_text_encoders.py \
+  --device cuda \
+  --prompt "A cinematic photo of a glass greenhouse on a rainy evening" \
+  --seeds 123 456 \
+  --output-dir outputs/masked_greenhouse
 """
 
 from __future__ import annotations
@@ -51,7 +54,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         default="outputs_masked",
-        help="Directory where condition subdirectories and metadata are saved.",
+        help="Directory where collages and metadata are saved.",
     )
     parser.add_argument(
         "--metadata-file",
@@ -130,11 +133,7 @@ def dtype_name(torch, device: str) -> str:
 
 
 def expected_output_files(seeds: list[int]) -> list[str]:
-    return [
-        str(Path(condition) / f"seed_{seed}.png")
-        for condition in CONDITIONS
-        for seed in seeds
-    ]
+    return [f"seed_{seed}_collage.png" for seed in seeds]
 
 
 def write_metadata(args: argparse.Namespace, output_dir: Path, device: str, dtype: str) -> Path:
@@ -286,14 +285,10 @@ def generate_for_seed(
     torch,
     pipe,
     args: argparse.Namespace,
-    output_dir: Path,
     seed: int,
     condition: str,
     embeddings: tuple,
-) -> None:
-    condition_dir = output_dir / condition
-    condition_dir.mkdir(parents=True, exist_ok=True)
-    output_path = condition_dir / f"seed_{seed}.png"
+):
     generator = make_generator(torch, seed)
     (
         prompt_embeds,
@@ -314,16 +309,112 @@ def generate_for_seed(
         height=args.height,
         generator=generator,
     ).images[0]
-    image.save(output_path)
-    print(f"Saved {output_path}")
+    return image
+
+
+def require_pillow():
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+    except Exception as exc:
+        raise RuntimeError(
+            "Creating collages requires Pillow. Install it with `python -m pip install pillow`."
+        ) from exc
+    return Image, ImageDraw, ImageFont
+
+
+def load_label_font(ImageFont, image_width: int):
+    font_size = max(24, image_width // 28)
+    for font_path in (
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    ):
+        try:
+            return ImageFont.truetype(font_path, font_size)
+        except OSError:
+            continue
+    return ImageFont.load_default()
+
+
+def draw_centered_label(draw, box_width: int, y: int, label: str, font) -> None:
+    try:
+        bbox = draw.textbbox((0, 0), label, font=font)
+        text_width = bbox[2] - bbox[0]
+    except AttributeError:
+        text_width = draw.textlength(label, font=font)
+    x = (box_width - text_width) / 2
+    draw.text((x, y), label, fill=(20, 20, 20), font=font)
+
+
+def make_collage(condition_images: dict):
+    Image, ImageDraw, ImageFont = require_pillow()
+    images = [condition_images[condition].convert("RGB") for condition in CONDITIONS]
+    image_width, image_height = images[0].size
+    label_height = max(48, image_height // 14)
+    padding = max(12, image_width // 80)
+    collage_width = image_width * 2 + padding * 3
+    collage_height = (image_height + label_height) * 2 + padding * 3
+    collage = Image.new("RGB", (collage_width, collage_height), "white")
+    draw = ImageDraw.Draw(collage)
+    font = load_label_font(ImageFont, image_width)
+
+    positions = {
+        "original": (padding, padding),
+        "clip-l": (image_width + padding * 2, padding),
+        "clip-g": (padding, image_height + label_height + padding * 2),
+        "t5": (image_width + padding * 2, image_height + label_height + padding * 2),
+    }
+    labels = {
+        "original": "original",
+        "clip-l": "clip-l masked",
+        "clip-g": "clip-g masked",
+        "t5": "t5 masked",
+    }
+
+    for condition, image in zip(CONDITIONS, images):
+        x, y = positions[condition]
+        draw_centered_label(
+            draw,
+            image_width,
+            y + max(4, padding // 2),
+            labels[condition],
+            font,
+        )
+        collage.paste(image, (x, y + label_height))
+
+    return collage
+
+
+def generate_collage_for_seed(
+    torch,
+    pipe,
+    args: argparse.Namespace,
+    output_dir: Path,
+    seed: int,
+    embeddings: tuple,
+) -> None:
+    condition_images = {}
+    for condition in CONDITIONS:
+        condition_images[condition] = generate_for_seed(
+            torch,
+            pipe,
+            args,
+            seed,
+            condition,
+            embeddings,
+        )
+
+    output_path = output_dir / f"seed_{seed}_collage.png"
+    collage = make_collage(condition_images)
+    collage.save(output_path)
+    print(f"Saved collage {output_path}")
 
 
 def main() -> None:
     args = parse_args()
     output_dir = Path(args.output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
-    for condition in CONDITIONS:
-        (output_dir / condition).mkdir(parents=True, exist_ok=True)
 
     torch, StableDiffusion3Pipeline = import_dependencies()
     device = choose_device(torch, args.device)
@@ -331,9 +422,8 @@ def main() -> None:
     pipe = load_pipeline(torch, StableDiffusion3Pipeline, device)
     embeddings = encode_prompt_embeddings(torch, pipe, args)
 
-    for condition in CONDITIONS:
-        for seed in args.seeds:
-            generate_for_seed(torch, pipe, args, output_dir, seed, condition, embeddings)
+    for seed in args.seeds:
+        generate_collage_for_seed(torch, pipe, args, output_dir, seed, embeddings)
 
 
 if __name__ == "__main__":
