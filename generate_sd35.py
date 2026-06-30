@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate images with Stable Diffusion 3.5 Large.
+"""Generate images with Stable Diffusion 3.5 Medium.
 
 Before running, accept the model terms on Hugging Face and authenticate:
 
@@ -29,12 +29,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-MODEL_ID = "stabilityai/stable-diffusion-3.5-large"
+MODEL_ID = "stabilityai/stable-diffusion-3.5-medium"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate images with Stable Diffusion 3.5 Large."
+        description="Generate images with Stable Diffusion 3.5 Medium."
     )
     parser.add_argument(
         "--prompt",

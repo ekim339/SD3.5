@@ -9,7 +9,7 @@ For a single prompt, this writes a text report containing four ranked lists:
     4. T5-XXL
 
 The default signal score is RMS across hidden channels for each token. Encoders
-are loaded and released one at a time to keep SD3.5 Large memory use lower.
+are loaded and released one at a time to keep SD3.5 Medium memory use lower.
 
 Usage:
     CUDA_VISIBLE_DEVICES=0 python3 rank_sd35_prompt_tokens.py \
@@ -26,7 +26,7 @@ import os
 from pathlib import Path
 
 
-MODEL_ID = "stabilityai/stable-diffusion-3.5-large"
+MODEL_ID = "stabilityai/stable-diffusion-3.5-medium"
 
 torch = None
 CLIPTextModelWithProjection = None
