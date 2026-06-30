@@ -520,8 +520,12 @@ def barplot_tick_label(index: int, row: dict | None, max_length: int) -> str:
     return f"{index}:{token_a}/{token_b}"
 
 
-def preferred_label_row(index: int, rows_by_encoder: dict[str, dict[int, dict]]) -> dict | None:
-    for encoder_name in ("t5", "clip_l", "clip_g"):
+def preferred_label_row(
+    index: int,
+    rows_by_encoder: dict[str, dict[int, dict]],
+    encoder_names: tuple[str, ...],
+) -> dict | None:
+    for encoder_name in encoder_names:
         if index in rows_by_encoder.get(encoder_name, {}):
             return rows_by_encoder[encoder_name][index]
     return None
@@ -589,7 +593,7 @@ def save_barplot(
         2,
         1,
         figsize=(figure_width, 10.0),
-        sharex=True,
+        sharex=False,
         constrained_layout=False,
     )
 
@@ -604,10 +608,18 @@ def save_barplot(
     plot_grouped_series(axes[0], token_indices, rows_by_encoder, clip_series, metric)
     plot_grouped_series(axes[1], token_indices, rows_by_encoder, t5_series, metric)
 
-    tick_labels = [
+    clip_tick_labels = [
         barplot_tick_label(
             index,
-            preferred_label_row(index, rows_by_encoder),
+            preferred_label_row(index, rows_by_encoder, ("clip_l", "clip_g")),
+            token_label_width,
+        )
+        for index in token_indices
+    ]
+    t5_tick_labels = [
+        barplot_tick_label(
+            index,
+            preferred_label_row(index, rows_by_encoder, ("t5",)),
             token_label_width,
         )
         for index in token_indices
@@ -618,8 +630,10 @@ def save_barplot(
         axis.grid(axis="y", alpha=0.25)
         axis.margins(x=0.005)
         axis.legend(loc="upper right")
+        axis.set_xticks(token_indices)
+    axes[0].set_xticklabels(clip_tick_labels, rotation=90, fontsize=5)
     axes[1].set_xticks(token_indices)
-    axes[1].set_xticklabels(tick_labels, rotation=90, fontsize=5)
+    axes[1].set_xticklabels(t5_tick_labels, rotation=90, fontsize=5)
 
     output_title = output_path.stem
     figure.text(
@@ -648,8 +662,9 @@ def save_barplot(
     )
     figure.suptitle(title, fontsize=11, y=0.985)
     figure.supxlabel(
-        "Token position: prompt A token / prompt B token. Plot shows the first "
-        f"{plotted_sequence_length} positions; labels use T5 when present, otherwise CLIP.",
+        "Token position: prompt A token / prompt B token. "
+        f"Plot shows the first {plotted_sequence_length} positions; "
+        "top axis uses CLIP tokens and bottom axis uses T5 tokens.",
         fontsize=10,
     )
     figure.tight_layout(rect=(0.06, 0.05, 1, 0.92))
