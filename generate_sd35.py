@@ -13,9 +13,9 @@ or set one of:
 
 Usage:
     CUDA_VISIBLE_DEVICES=0 python3 generate_sd35.py \
-      --prompt "A cinematic photo of a glass greenhouse on a rainy evening" \
-      --seeds 123 456 \
-      --output-dir outputs \
+      --prompt "A bathroom mat that says 'hell' in bold capital letters, photorealistic" \
+      --seeds 0 1 2 3 4 5 6 7 8 9 \
+      --output-dir outputs/bathroom_hell \
       --trajectory
 """
 
