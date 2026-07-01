@@ -9,12 +9,19 @@ Edit these constants to choose the tokens and multiplier sweep:
 
 For each seed, this creates one collage:
 
-    row 1: CLIP-L + CLIP-G token rows scaled together
+    row 1: CLIP-L + CLIP-G + T5 token rows scaled together
     row 2: CLIP-L token channels only
     row 3: CLIP-G token channels only
     row 4: T5 token rows only
 
 Each column corresponds to one multiplier value.
+
+Usage:
+    CUDA_VISIBLE_DEVICES=0 python3 generate_sd35_amplify_tokens.py \
+      --prompt "A bathroom mat that says 'hello' in bold capital letters, photorealistic" \
+      --seeds 0 1 2 3 4 5 6 7 8 9 \
+      --output-dir outputs/amplify_sweep \
+      --device cuda
 """
 
 from __future__ import annotations
@@ -39,7 +46,7 @@ T5_TOKEN_INDICES = [0, 4, 6, 7, 8]
 MULTIPLIER_VALUES = [0, 0.5, 1, 2, 3, 5, 10]
 
 ROW_SPECS = (
-    ("clip", "clip-l + clip-g", "clip", CLIP_TOKEN_INDICES),
+    ("all", "clip-l + clip-g + t5", "all", None),
     ("clip-l", "clip-l only", "clip-l", CLIP_TOKEN_INDICES),
     ("clip-g", "clip-g only", "clip-g", CLIP_TOKEN_INDICES),
     ("t5", "t5 only", "t5", T5_TOKEN_INDICES),
@@ -188,6 +195,7 @@ def write_metadata(
         ],
         "token_summary": token_summary,
         "token_mapping": {
+            "all": "scales CLIP_TOKEN_INDICES in clip-l and clip-g channels plus T5_TOKEN_INDICES in T5 rows",
             "clip": "token index i scales prompt_embeds[:, i, selected_clip_channels]",
             "t5": "token index i scales prompt_embeds[:, 77 + i, :]",
             "pooled_prompt_embeds": "unchanged because pooled embeddings are not token-specific",
@@ -276,10 +284,26 @@ def clip_channel_slice(mode: str) -> tuple[int, int]:
     raise ValueError(f"Unsupported CLIP mode: {mode}")
 
 
+def scale_clip_tokens(prompt_embeds, token_indices: list[int], multiplier: float, mode: str) -> None:
+    sequence_length = prompt_embeds.shape[1]
+    start, end = clip_channel_slice(mode)
+    for token_index in token_indices:
+        if token_index < CLIP_SEQUENCE_LENGTH and token_index < sequence_length:
+            prompt_embeds[:, token_index, start:end] *= multiplier
+
+
+def scale_t5_tokens(prompt_embeds, token_indices: list[int], multiplier: float) -> None:
+    sequence_length = prompt_embeds.shape[1]
+    for token_index in token_indices:
+        t5_position = CLIP_SEQUENCE_LENGTH + token_index
+        if t5_position < sequence_length:
+            prompt_embeds[:, t5_position, :] *= multiplier
+
+
 def scaled_prompt_embeddings(
     embeddings: tuple,
     mode: str,
-    token_indices: list[int],
+    token_indices: list[int] | None,
     multiplier: float,
 ) -> tuple:
     (
@@ -289,17 +313,17 @@ def scaled_prompt_embeddings(
         negative_pooled_prompt_embeds,
     ) = clone_embeddings(embeddings)
 
-    sequence_length = prompt_embeds.shape[1]
-    if mode in {"clip", "clip-l", "clip-g"}:
-        start, end = clip_channel_slice(mode)
-        for token_index in token_indices:
-            if token_index < CLIP_SEQUENCE_LENGTH and token_index < sequence_length:
-                prompt_embeds[:, token_index, start:end] *= multiplier
+    if mode == "all":
+        scale_clip_tokens(prompt_embeds, CLIP_TOKEN_INDICES, multiplier, "clip")
+        scale_t5_tokens(prompt_embeds, T5_TOKEN_INDICES, multiplier)
+    elif mode in {"clip", "clip-l", "clip-g"}:
+        if token_indices is None:
+            raise ValueError(f"Token indices are required for mode: {mode}")
+        scale_clip_tokens(prompt_embeds, token_indices, multiplier, mode)
     elif mode == "t5":
-        for token_index in token_indices:
-            t5_position = CLIP_SEQUENCE_LENGTH + token_index
-            if t5_position < sequence_length:
-                prompt_embeds[:, t5_position, :] *= multiplier
+        if token_indices is None:
+            raise ValueError("Token indices are required for mode: t5")
+        scale_t5_tokens(prompt_embeds, token_indices, multiplier)
     else:
         raise ValueError(f"Unknown scaling mode: {mode}")
 
