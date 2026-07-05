@@ -1,0 +1,124 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "git-inspect",
+			"type": "shell",
+			"command": "pwd && git status -sb && git branch -vv",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "git-rebase-remote",
+			"type": "shell",
+			"command": "git pull --rebase origin main",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "git-status-during-rebase",
+			"type": "shell",
+			"command": "git status --short --branch && echo '---' && git diff --name-only --diff-filter=U",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "inspect-conflict-versions",
+			"type": "shell",
+			"command": "echo '--- OURS (current commit) ---' && git show :2:generate_sd35_amplify_tokens.py | sed -n '1,240p' && echo '\n--- THEIRS (incoming remote) ---' && git show :3:generate_sd35_amplify_tokens.py | sed -n '1,240p'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "diff-conflict-file",
+			"type": "shell",
+			"command": "git diff --cc -- generate_sd35_amplify_tokens.py | sed -n '1,240p'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "search-remote-separate-args",
+			"type": "shell",
+			"command": "git show :3:generate_sd35_amplify_tokens.py | grep -n 'separate\\|scale_slug\\|sample_filename' -n || true",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "show-remote-args-and-save-logic",
+			"type": "shell",
+			"command": "git show :3:generate_sd35_amplify_tokens.py | sed -n '80,120p;180,220p;240,280p;640,690p'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "verify-script-syntax",
+			"type": "shell",
+			"command": "python3 -m py_compile generate_sd35_amplify_tokens.py",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "continue-rebase",
+			"type": "shell",
+			"command": "git add generate_sd35_amplify_tokens.py && git rebase --continue",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "verify-rebase-status",
+			"type": "shell",
+			"command": "git status -sb && echo '---' && git log --oneline --decorate -3",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "inspect-rebase-state",
+			"type": "shell",
+			"command": "git rev-parse --abbrev-ref HEAD && echo '---' && git status && echo '---' && ls .git | grep -E 'rebase|MERGE_HEAD|CHERRY_PICK_HEAD' || true",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "finish-rebase",
+			"type": "shell",
+			"command": "git rebase --continue",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "verify-rebase-complete",
+			"type": "shell",
+			"command": "git status -sb && echo '---' && git branch -vv && echo '---' && git log --oneline --decorate -3",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "continue-rebase-no-edit",
+			"type": "shell",
+			"command": "git add generate_sd35_amplify_tokens.py && git rebase --continue --no-edit",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "finish-rebase-with-editor",
+			"type": "shell",
+			"command": "git add generate_sd35_amplify_tokens.py && GIT_EDITOR=true git rebase --continue",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "verify-post-rebase",
+			"type": "shell",
+			"command": "git status -sb && echo '---' && git log --oneline --decorate -3",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "push-main-branch",
+			"type": "shell",
+			"command": "git push origin main",
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}
