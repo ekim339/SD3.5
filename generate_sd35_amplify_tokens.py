@@ -7,9 +7,6 @@ Edit these constants to choose the tokens and multiplier sweep:
     T5_TOKEN_INDICES = [0, 4, 6, 7, 8]
     MULTIPLIER_VALUES = [0, 0.5, 1, 2, 3, 5, 10]
 
-Set CLIP_TOKEN_INDICES = [] to scale every CLIP token position.
-Set T5_TOKEN_INDICES = [] to scale every T5 token position.
-
 For each seed, this creates one collage:
 
     row 1: CLIP-L + CLIP-G + T5 token rows scaled together
@@ -98,6 +95,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--width", type=int, default=1024, help="Generated image width.")
     parser.add_argument("--height", type=int, default=1024, help="Generated image height.")
+    parser.add_argument(
+        "--separate",
+        action="store_true",
+        help="Save each generated sample separately instead of creating one collage per seed.",
+    )
     return parser.parse_args()
 
 
@@ -170,20 +172,24 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--width and --height must be > 0.")
 
 
-def selected_clip_token_indices() -> list[int]:
-    if CLIP_TOKEN_INDICES:
-        return CLIP_TOKEN_INDICES
-    return list(range(CLIP_SEQUENCE_LENGTH))
+def scale_slug(value: float) -> str:
+    return f"{value:g}".replace("-", "neg").replace(".", "p")
 
 
-def selected_t5_token_indices() -> list[int]:
-    if T5_TOKEN_INDICES:
-        return T5_TOKEN_INDICES
-    return list(range(T5_SEQUENCE_LENGTH))
+def sample_filename(seed: int, encoder_key: str, multiplier: float) -> str:
+    return f"seed_{seed}_encoder_{encoder_key}_scale_{scale_slug(multiplier)}.png"
 
 
-def expected_output_files(seeds: list[int]) -> list[str]:
-    return [f"seed_{seed}_sweep.png" for seed in seeds]
+def expected_output_files(args: argparse.Namespace) -> list[str]:
+    if not args.separate:
+        return [f"seed_{seed}_sweep.png" for seed in args.seeds]
+
+    return [
+        sample_filename(seed, row_key, multiplier)
+        for seed in args.seeds
+        for row_key, _row_label, _mode, _token_indices in ROW_SPECS
+        for multiplier in MULTIPLIER_VALUES
+    ]
 
 
 def write_metadata(
@@ -203,10 +209,6 @@ def write_metadata(
         "seeds": args.seeds,
         "clip_token_indices": CLIP_TOKEN_INDICES,
         "t5_token_indices": T5_TOKEN_INDICES,
-        "clip_token_selection": "all" if not CLIP_TOKEN_INDICES else "custom",
-        "t5_token_selection": "all" if not T5_TOKEN_INDICES else "custom",
-        "effective_clip_token_indices": selected_clip_token_indices(),
-        "effective_t5_token_indices": selected_t5_token_indices(),
         "multiplier_values": MULTIPLIER_VALUES,
         "rows": [
             {"key": key, "label": label, "mode": mode, "token_indices": token_indices}
@@ -228,8 +230,9 @@ def write_metadata(
         "guidance_scale": args.guidance_scale,
         "width": args.width,
         "height": args.height,
+        "separate": args.separate,
         "metadata_file": args.metadata_file,
-        "output_files": expected_output_files(args.seeds),
+        "output_files": expected_output_files(args),
     }
     metadata_path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
     print(f"Saved metadata: {metadata_path}")
@@ -306,16 +309,14 @@ def clip_channel_slice(mode: str) -> tuple[int, int]:
 def scale_clip_tokens(prompt_embeds, token_indices: list[int], multiplier: float, mode: str) -> None:
     sequence_length = prompt_embeds.shape[1]
     start, end = clip_channel_slice(mode)
-    effective_indices = token_indices if token_indices else selected_clip_token_indices()
-    for token_index in effective_indices:
+    for token_index in token_indices:
         if token_index < CLIP_SEQUENCE_LENGTH and token_index < sequence_length:
             prompt_embeds[:, token_index, start:end] *= multiplier
 
 
 def scale_t5_tokens(prompt_embeds, token_indices: list[int], multiplier: float) -> None:
     sequence_length = prompt_embeds.shape[1]
-    effective_indices = token_indices if token_indices else selected_t5_token_indices()
-    for token_index in effective_indices:
+    for token_index in token_indices:
         t5_position = CLIP_SEQUENCE_LENGTH + token_index
         if t5_position < sequence_length:
             prompt_embeds[:, t5_position, :] *= multiplier
@@ -335,8 +336,8 @@ def scaled_prompt_embeddings(
     ) = clone_embeddings(embeddings)
 
     if mode == "all":
-        scale_clip_tokens(prompt_embeds, selected_clip_token_indices(), multiplier, "clip")
-        scale_t5_tokens(prompt_embeds, selected_t5_token_indices(), multiplier)
+        scale_clip_tokens(prompt_embeds, CLIP_TOKEN_INDICES, multiplier, "clip")
+        scale_t5_tokens(prompt_embeds, T5_TOKEN_INDICES, multiplier)
     elif mode in {"clip", "clip-l", "clip-g"}:
         if token_indices is None:
             raise ValueError(f"Token indices are required for mode: {mode}")
@@ -410,24 +411,22 @@ def tokenizer_labels(tokenizer, prompt: str, token_indices: list[int], max_lengt
 
 
 def build_token_summary(pipe, prompt: str) -> dict:
-    clip_indices = selected_clip_token_indices()
-    t5_indices = selected_t5_token_indices()
     clip_l_labels = tokenizer_labels(
         pipe.tokenizer,
         prompt,
-        clip_indices,
+        CLIP_TOKEN_INDICES,
         pipe.tokenizer.model_max_length,
     )
     clip_g_labels = tokenizer_labels(
         pipe.tokenizer_2,
         prompt,
-        clip_indices,
+        CLIP_TOKEN_INDICES,
         pipe.tokenizer_2.model_max_length,
     )
-    t5_labels = tokenizer_labels(pipe.tokenizer_3, prompt, t5_indices, T5_SEQUENCE_LENGTH)
+    t5_labels = tokenizer_labels(pipe.tokenizer_3, prompt, T5_TOKEN_INDICES, T5_SEQUENCE_LENGTH)
 
     clip_labels = {}
-    for token_index in clip_indices:
+    for token_index in CLIP_TOKEN_INDICES:
         clip_l = clip_l_labels[token_index]
         clip_g = clip_g_labels[token_index]
         if clip_l == clip_g:
@@ -444,20 +443,12 @@ def build_token_summary(pipe, prompt: str) -> dict:
 
 
 def format_token_summary(token_summary: dict) -> tuple[str, str]:
-    if CLIP_TOKEN_INDICES:
-        clip_text = ", ".join(
-            f"{index}:{token_summary['clip'][index]!r}" for index in CLIP_TOKEN_INDICES
-        )
-    else:
-        clip_text = f"ALL {CLIP_SEQUENCE_LENGTH} positions"
-
-    if T5_TOKEN_INDICES:
-        t5_text = ", ".join(
-            f"{index}:{token_summary['t5'][index]!r}" for index in T5_TOKEN_INDICES
-        )
-    else:
-        t5_text = f"ALL {T5_SEQUENCE_LENGTH} positions"
-
+    clip_text = ", ".join(
+        f"{index}:{token_summary['clip'][index]!r}" for index in CLIP_TOKEN_INDICES
+    )
+    t5_text = ", ".join(
+        f"{index}:{token_summary['t5'][index]!r}" for index in T5_TOKEN_INDICES
+    )
     return f"CLIP tokens: {clip_text}", f"T5 tokens: {t5_text}"
 
 
@@ -630,7 +621,7 @@ def generate_sweep_for_seed(
     generated_images = {}
     for row_key, _row_label, mode, token_indices in ROW_SPECS:
         for multiplier in MULTIPLIER_VALUES:
-            generated_images[(row_key, multiplier)] = generate_image(
+            image = generate_image(
                 torch,
                 pipe,
                 args,
@@ -640,6 +631,15 @@ def generate_sweep_for_seed(
                 token_indices,
                 multiplier,
             )
+            if args.separate:
+                output_path = output_dir / sample_filename(seed, row_key, multiplier)
+                image.save(output_path)
+                print(f"Saved {output_path}")
+            else:
+                generated_images[(row_key, multiplier)] = image
+
+    if args.separate:
+        return
 
     output_path = output_dir / f"seed_{seed}_sweep.png"
     collage = make_collage(seed, generated_images, args.prompt, token_summary)
