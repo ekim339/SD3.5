@@ -103,6 +103,22 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Save each generated sample separately instead of creating one collage per seed.",
     )
+    parser.add_argument(
+        "--metrics",
+        action="store_true",
+        help="Add classifier metrics below each image in the collage.",
+    )
+    parser.add_argument(
+        "--classifier-checkpoint",
+        default=None,
+        help="Path to classifier.pt from train_image_classifier.py. Required with --metrics.",
+    )
+    parser.add_argument(
+        "--classifier-device",
+        choices=("cuda", "mps", "cpu"),
+        default="cpu",
+        help="Device for classifier metrics. Defaults to cpu to keep GPU memory free.",
+    )
     return parser.parse_args()
 
 
@@ -159,6 +175,64 @@ def dtype_name(torch, device: str) -> str:
     return str(dtype)
 
 
+def load_torch_checkpoint(torch, path: Path, device: str) -> dict:
+    try:
+        return torch.load(path, map_location=device, weights_only=False)
+    except TypeError:
+        return torch.load(path, map_location=device)
+
+
+def load_classifier(torch, checkpoint_path: str, device: str) -> dict:
+    try:
+        from train_image_classifier import SmallCNN
+    except ImportError as exc:
+        raise RuntimeError(
+            "Could not import SmallCNN from train_image_classifier.py. "
+            "Keep train_image_classifier.py in the same folder."
+        ) from exc
+
+    checkpoint = load_torch_checkpoint(torch, Path(checkpoint_path).expanduser().resolve(), device)
+    class_names = checkpoint["class_names"]
+    image_size = int(checkpoint.get("image_size", 224))
+    model = SmallCNN(num_text_classes=len(class_names)).to(device)
+    model.load_state_dict(checkpoint["model_state_dict"])
+    model.eval()
+    return {
+        "model": model,
+        "class_names": class_names,
+        "image_size": image_size,
+        "device": device,
+    }
+
+
+def pil_image_to_classifier_tensor(torch, image, image_size: int):
+    image = image.convert("RGB").resize((image_size, image_size))
+    tensor = torch.tensor(list(image.getdata()), dtype=torch.float32)
+    tensor = tensor.view(image_size, image_size, 3).permute(2, 0, 1) / 255.0
+    tensor = (tensor - 0.5) / 0.5
+    return tensor.unsqueeze(0)
+
+
+def classify_generated_image(torch, classifier: dict, image) -> dict:
+    model = classifier["model"]
+    device = classifier["device"]
+    class_names = classifier["class_names"]
+    tensor = pil_image_to_classifier_tensor(torch, image, classifier["image_size"]).to(device)
+    with torch.no_grad():
+        outputs = model(tensor)
+
+    object_probs = torch.softmax(outputs["object_logits"][0], dim=0).detach().cpu()
+    text_probs = torch.softmax(outputs["text_logits"][0], dim=0).detach().cpu()
+    text_class_probs = torch.softmax(outputs["text_class_logits"][0], dim=0).detach().cpu()
+    best_class_index = int(text_class_probs.argmax().item())
+    return {
+        "object_correct": float(object_probs[1].item()),
+        "text_correct": float(text_probs[1].item()),
+        "text_class": class_names[best_class_index],
+        "text_class_probability": float(text_class_probs[best_class_index].item()),
+    }
+
+
 def validate_args(args: argparse.Namespace) -> None:
     all_indices = CLIP_TOKEN_INDICES + T5_TOKEN_INDICES
     if any(token_index < 0 for token_index in all_indices):
@@ -173,6 +247,12 @@ def validate_args(args: argparse.Namespace) -> None:
         raise ValueError("--steps must be > 0.")
     if args.width <= 0 or args.height <= 0:
         raise ValueError("--width and --height must be > 0.")
+    if args.metrics and args.separate:
+        raise ValueError("--metrics is only supported for collage output; remove --separate.")
+    if args.metrics and not args.classifier_checkpoint:
+        raise ValueError("--classifier-checkpoint is required when --metrics is activated.")
+    if args.metrics and not Path(args.classifier_checkpoint).expanduser().exists():
+        raise FileNotFoundError(f"Classifier checkpoint does not exist: {args.classifier_checkpoint}")
 
 
 def selected_clip_token_indices() -> list[int]:
@@ -250,6 +330,9 @@ def write_metadata(
         "width": args.width,
         "height": args.height,
         "separate": args.separate,
+        "metrics": args.metrics,
+        "classifier_checkpoint": args.classifier_checkpoint,
+        "classifier_device": args.classifier_device,
         "metadata_file": args.metadata_file,
         "output_files": expected_output_files(args),
     }
@@ -557,7 +640,31 @@ def multiplier_label(value: float) -> str:
     return f"x{value:g}"
 
 
-def make_collage(seed: int, generated_images: dict, prompt: str, token_summary: dict):
+def metric_lines(metrics: dict | None) -> list[str]:
+    if not metrics:
+        return []
+    return [
+        f"\"object_correct\": {metrics['object_correct']:.2f}",
+        f"\"text_correct\": {metrics['text_correct']:.2f}",
+        f"\"{metrics['text_class']}\": {metrics['text_class_probability']:.2f},",
+    ]
+
+
+def draw_metric_lines(draw, x: int, y: int, width: int, lines: list[str], font, line_height: int) -> None:
+    for line_index, line in enumerate(lines):
+        text_width, _, y_offset = text_dimensions(draw, line, font)
+        text_x = x + (width - text_width) / 2
+        text_y = y + line_index * line_height - y_offset
+        draw.text((text_x, text_y), line, fill=(20, 20, 20), font=font)
+
+
+def make_collage(
+    seed: int,
+    generated_images: dict,
+    prompt: str,
+    token_summary: dict,
+    metrics_by_image: dict | None = None,
+):
     Image, ImageDraw, ImageFont = require_pillow()
     sample = next(iter(generated_images.values())).convert("RGB")
     image_width, image_height = sample.size
@@ -566,6 +673,9 @@ def make_collage(seed: int, generated_images: dict, prompt: str, token_summary: 
     column_header_height = max(52, image_height // 16)
     row_header_height = max(44, image_height // 20)
     prompt_line_height = max(28, image_height // 34)
+    metric_line_height = max(22, image_height // 44)
+    metrics_panel_height = metric_line_height * 3 + padding if metrics_by_image else 0
+    tile_height = image_height + metrics_panel_height
 
     collage_width = row_label_width + image_width * len(MULTIPLIER_VALUES) + padding * (len(MULTIPLIER_VALUES) + 2)
     scratch = Image.new("RGB", (collage_width, 1), "white")
@@ -573,6 +683,7 @@ def make_collage(seed: int, generated_images: dict, prompt: str, token_summary: 
     prompt_font = load_font(ImageFont, image_width, scale=38, minimum=20)
     label_font = load_font(ImageFont, image_width, scale=32, minimum=20, bold=True)
     small_font = load_font(ImageFont, image_width, scale=42, minimum=16)
+    metrics_font = load_font(ImageFont, image_width, scale=48, minimum=15)
 
     clip_summary, t5_summary = format_token_summary(token_summary)
     header_lines = []
@@ -590,7 +701,7 @@ def make_collage(seed: int, generated_images: dict, prompt: str, token_summary: 
     collage_height = (
         header_height
         + column_header_height
-        + (row_header_height + image_height) * len(ROW_SPECS)
+        + (row_header_height + tile_height) * len(ROW_SPECS)
         + padding * (len(ROW_SPECS) + 2)
     )
     collage = Image.new("RGB", (collage_width, collage_height), "white")
@@ -621,13 +732,13 @@ def make_collage(seed: int, generated_images: dict, prompt: str, token_summary: 
 
     row_start_y = column_y + column_header_height + padding
     for row_index, (row_key, row_label, _mode, _token_indices) in enumerate(ROW_SPECS):
-        y = row_start_y + row_index * (row_header_height + image_height + padding)
+        y = row_start_y + row_index * (row_header_height + tile_height + padding)
         draw_centered_text(
             draw,
             padding,
             y + row_header_height,
             row_label_width,
-            image_height,
+            tile_height,
             row_label,
             small_font,
         )
@@ -635,6 +746,17 @@ def make_collage(seed: int, generated_images: dict, prompt: str, token_summary: 
             x = grid_x + col_index * (image_width + padding)
             image = generated_images[(row_key, value)].convert("RGB")
             collage.paste(image, (x, y + row_header_height))
+            lines = metric_lines(metrics_by_image.get((row_key, value)) if metrics_by_image else None)
+            if lines:
+                draw_metric_lines(
+                    draw,
+                    x,
+                    y + row_header_height + image_height + padding // 2,
+                    image_width,
+                    lines,
+                    metrics_font,
+                    metric_line_height,
+                )
 
     draw.text((padding, collage_height - padding - 18), f"seed: {seed}", fill=(60, 60, 60), font=small_font)
     return collage
@@ -648,8 +770,10 @@ def generate_sweep_for_seed(
     seed: int,
     embeddings: tuple,
     token_summary: dict,
+    classifier: dict | None,
 ) -> None:
     generated_images = {}
+    metrics_by_image = {} if classifier else None
     for row_key, _row_label, mode, token_indices in ROW_SPECS:
         for multiplier in MULTIPLIER_VALUES:
             image = generate_image(
@@ -668,12 +792,24 @@ def generate_sweep_for_seed(
                 print(f"Saved {output_path}")
             else:
                 generated_images[(row_key, multiplier)] = image
+                if classifier:
+                    metrics_by_image[(row_key, multiplier)] = classify_generated_image(
+                        torch,
+                        classifier,
+                        image,
+                    )
 
     if args.separate:
         return
 
     output_path = output_dir / f"seed_{seed}_sweep.png"
-    collage = make_collage(seed, generated_images, args.prompt, token_summary)
+    collage = make_collage(
+        seed,
+        generated_images,
+        args.prompt,
+        token_summary,
+        metrics_by_image,
+    )
     collage.save(output_path)
     print(f"Saved collage {output_path}")
 
@@ -690,9 +826,23 @@ def main() -> None:
     token_summary = build_token_summary(pipe, args.prompt)
     write_metadata(args, output_dir, device, dtype_name(torch, device), token_summary)
     embeddings = encode_prompt_embeddings(torch, pipe, args)
+    classifier = None
+    if args.metrics:
+        classifier_device = choose_device(torch, args.classifier_device)
+        classifier = load_classifier(torch, args.classifier_checkpoint, classifier_device)
+        print(f"Loaded classifier metrics model on {classifier_device}.")
 
     for seed in args.seeds:
-        generate_sweep_for_seed(torch, pipe, args, output_dir, seed, embeddings, token_summary)
+        generate_sweep_for_seed(
+            torch,
+            pipe,
+            args,
+            output_dir,
+            seed,
+            embeddings,
+            token_summary,
+            classifier,
+        )
 
 
 if __name__ == "__main__":
