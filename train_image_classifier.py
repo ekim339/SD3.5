@@ -15,9 +15,11 @@ Text-class loss is used only for samples that have a text-class label.
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import math
 import random
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -64,8 +66,70 @@ def choose_device(requested: str | None) -> str:
 
 
 def read_config(path: Path) -> dict:
-    with path.open("r", encoding="utf-8") as file:
-        return json.load(file)
+    text = path.read_text(encoding="utf-8")
+    try:
+        config = json.loads(text)
+    except json.JSONDecodeError as json_error:
+        try:
+            config = json.loads(strip_json_comments_and_trailing_commas(text))
+        except json.JSONDecodeError:
+            try:
+                config = ast.literal_eval(text)
+            except (SyntaxError, ValueError):
+                line = text.splitlines()[json_error.lineno - 1] if text.splitlines() else ""
+                pointer = " " * max(0, json_error.colno - 1) + "^"
+                raise ValueError(
+                    f"Could not parse config file: {path}\n"
+                    f"JSON error at line {json_error.lineno}, column {json_error.colno}: "
+                    f"{json_error.msg}\n\n"
+                    f"{line}\n"
+                    f"{pointer}\n\n"
+                    "Use valid JSON with double-quoted keys/strings, or a Python dict literal.\n"
+                    "Common JSON mistakes: single quotes, unquoted keys, and trailing commas."
+                ) from json_error
+
+    if not isinstance(config, dict):
+        raise ValueError(f"Config must be a JSON object/dict, got {type(config).__name__}.")
+    return config
+
+
+def strip_json_comments_and_trailing_commas(text: str) -> str:
+    stripped_lines = []
+    in_block_comment = False
+    for line in text.splitlines():
+        cleaned = []
+        index = 0
+        in_string = False
+        quote = ""
+        while index < len(line):
+            char = line[index]
+            next_char = line[index + 1] if index + 1 < len(line) else ""
+            if in_block_comment:
+                if char == "*" and next_char == "/":
+                    in_block_comment = False
+                    index += 2
+                else:
+                    index += 1
+                continue
+            if not in_string and char == "/" and next_char == "*":
+                in_block_comment = True
+                index += 2
+                continue
+            if not in_string and char == "/" and next_char == "/":
+                break
+            if char in {'"', "'"} and (index == 0 or line[index - 1] != "\\"):
+                if in_string and char == quote:
+                    in_string = False
+                    quote = ""
+                elif not in_string:
+                    in_string = True
+                    quote = char
+            cleaned.append(char)
+            index += 1
+        stripped_lines.append("".join(cleaned))
+
+    without_comments = "\n".join(stripped_lines)
+    return re.sub(r",\s*([}\]])", r"\1", without_comments)
 
 
 def resolve_folder_list(config: dict, key: str, base_dir: Path) -> list[Path]:
