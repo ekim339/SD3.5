@@ -1,0 +1,32 @@
+{
+  "image_size": 224,
+  "text_class_loss_weight": 1.0,
+  "object_correct_folders": [
+    "data/hello_and_correct_object",
+    "data/helllo_and_correct_object"
+  ],
+  "object_wrong_folders": [
+    "data/hello_and_wrong_object",
+    "data/helllo_and_wrong_object"
+  ],
+  "text_correct_folders": [
+    "data/hello_and_correct_object",
+    "data/hello_and_wrong_object"
+  ],
+  "text_wrong_folders": [
+    "data/helllo_and_correct_object",
+    "data/helllo_and_wrong_object"
+  ],
+  "text_classes": {
+    "hello": [
+      "data/hello_and_correct_object",
+      "data/hello_and_wrong_object"
+    ],
+    "hello!": [],
+    "HELLO": [],
+    "helllo": [
+      "data/helllo_and_correct_object",
+      "data/helllo_and_wrong_object"
+    ]
+  }
+}
