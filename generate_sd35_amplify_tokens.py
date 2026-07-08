@@ -22,9 +22,11 @@ Each column corresponds to one multiplier value.
 Usage:
     CUDA_VISIBLE_DEVICES=0 python3 generate_sd35_amplify_tokens.py \
       --prompt "A bathroom mat that says 'hello' in bold capital letters, photorealistic" \
-      --seeds 0 1 2 3 4 5 6 7 8 9 \
-      --output-dir outputs/amplify_sweep \
-      --device cuda
+      --seeds 0 1 2 3 \
+      --output-dir outputs/amplify_sweep/whole_encoder_w_classifier \
+      --device cuda \
+      --classifier-checkpoint classifier_runs/hello_classifier/classifier.pt \
+      --metrics
 """
 
 from __future__ import annotations
@@ -44,8 +46,8 @@ CLIP_L_CHANNELS = (0, 768)
 CLIP_G_CHANNELS = (768, 2048)
 CLIP_BOTH_CHANNELS = (0, 2048)
 
-CLIP_TOKEN_INDICES = [0, 1, 2, 3, 7, 10, 16]
-T5_TOKEN_INDICES = [0, 4, 6, 7, 8]
+CLIP_TOKEN_INDICES = []
+T5_TOKEN_INDICES = []
 MULTIPLIER_VALUES = [0, 0.5, 1, 2, 3, 5, 10]
 
 ROW_SPECS = (

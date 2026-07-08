@@ -1,32 +1,73 @@
 {
   "image_size": 224,
   "text_class_loss_weight": 1.0,
+  // total: 111+74+28+31+20+48+156+35+12=515
   "object_correct_folders": [
-    "data/hello_and_correct_object",
-    "data/helllo_and_correct_object"
+    "outputs/classifier_data/correct_letter_correct_object/hello",  // 111
+    "outputs/classifier_data/correct_letter_correct_object/helllo", // 74
+    "outputs/classifier_data/correct_letter_correct_object/helllo!", // 28
+    "outputs/classifier_data/correct_letter_correct_object/HELLO", // 31
+    "outputs/classifier_data/correct_letter_correct_object/hello!", // 20
+    "outputs/classifier_data/correct_letter_correct_object/hello.", // 48
+    "outputs/classifier_data/wrong_letter_correct_object/deformed", // 156
+    "outputs/classifier_data/wrong_letter_correct_object/somethingelse", // 35
+    "outputs/classifier_data/wrong_letter_correct_object/helo" // 12
   ],
+  // total: 70+29+1+2+25+51+43=221
   "object_wrong_folders": [
-    "data/hello_and_wrong_object",
-    "data/helllo_and_wrong_object"
+    "outputs/classifier_data/correct_letter_wrong_object/hello", // 70
+    "outputs/classifier_data/correct_letter_wrong_object/helllo", // 29
+    "outputs/classifier_data/correct_letter_wrong_object/helllo!", // 1
+    "outputs/classifier_data/correct_letter_wrong_object/hello!", // 2
+    "outputs/classifier_data/correct_letter_wrong_object/HELLO", // 25
+    "outputs/classifier_data/wrong_letter_wrong_object/letters", // 51
+    "outputs/classifier_data/wrong_letter_wrong_object/random" //43
   ],
+  // total: 111+74+28+31+20+48+70+29+1+2+25=439
   "text_correct_folders": [
-    "data/hello_and_correct_object",
-    "data/hello_and_wrong_object"
+    "outputs/classifier_data/correct_letter_correct_object/hello", // 111
+    "outputs/classifier_data/correct_letter_correct_object/helllo", // 74
+    "outputs/classifier_data/correct_letter_correct_object/helllo!", // 28
+    "outputs/classifier_data/correct_letter_correct_object/HELLO", // 31
+    "outputs/classifier_data/correct_letter_correct_object/hello!", // 20
+    "outputs/classifier_data/correct_letter_correct_object/hello.", // 48
+    "outputs/classifier_data/correct_letter_wrong_object/hello", // 70
+    "outputs/classifier_data/correct_letter_wrong_object/helllo", // 29
+    "outputs/classifier_data/correct_letter_wrong_object/helllo!", // 1
+    "outputs/classifier_data/correct_letter_wrong_object/hello!", // 2
+    "outputs/classifier_data/correct_letter_wrong_object/HELLO", // 25
   ],
+  // total: 51+43+156+35+12=297
   "text_wrong_folders": [
-    "data/helllo_and_correct_object",
-    "data/helllo_and_wrong_object"
+    "outputs/classifier_data/wrong_letter_wrong_object/letters", // 51
+    "outputs/classifier_data/wrong_letter_wrong_object/random", // 43
+    "outputs/classifier_data/wrong_letter_correct_object/deformed", // 156
+    "outputs/classifier_data/wrong_letter_correct_object/somethingelse", // 35
+    "outputs/classifier_data/wrong_letter_correct_object/helo" // 12
   ],
   "text_classes": {
+    // 111+70 = 181
     "hello": [
-      "data/hello_and_correct_object",
-      "data/hello_and_wrong_object"
+      "outputs/classifier_data/correct_letter_wrong_object/hello",
+      "outputs/classifier_data/correct_letter_wrong_object/hello"
     ],
-    "hello!": [],
-    "HELLO": [],
+    // 20+50+2 = 72
+    "hello_extra": [
+      "outputs/classifier_data/correct_letter_correct_object/hello!",
+      "outputs/classifier_data/correct_letter_correct_object/hello.",
+      "outputs/classifier_data/correct_letter_wrong_object/hello!",
+      "outputs/classifier_data/correct_letter_wrong_object/hello."
+    ],
+    // 31+25 = 56
+    "HELLO": [
+      "outputs/classifier_data/correct_letter_correct_object/HELLO",
+      "outputs/classifier_data/correct_letter_wrong_object/HELLO"],
+    // 74+28+29+1 = 132
     "helllo": [
-      "data/helllo_and_correct_object",
-      "data/helllo_and_wrong_object"
+      "outputs/classifier_data/correct_letter_correct_object/helllo",
+      "outputs/classifier_data/correct_letter_correct_object/helllo!",
+      "outputs/classifier_data/correct_letter_wrong_object/helllo",
+      "outputs/classifier_data/correct_letter_wrong_object/helllo!"
     ]
   }
 }

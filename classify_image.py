@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Classify an image with a checkpoint from train_image_classifier.py."""
+"""Classify an image with a checkpoint from train_image_classifier.py.
+
+python3 classify_image.py \
+  --checkpoint classifier_runs/hello_classifier/classifier.pt \
+  --image outputs/bathroom_hello/seed_9.png \
+  --device cuda \
+  --json
+
+"""
 
 from __future__ import annotations
 
