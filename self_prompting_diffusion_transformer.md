@@ -277,6 +277,8 @@ prior, enabling region-aware generation during denoising.
 The resulting embeddings are injected into the diffusion transformer
 through cross-attention layers, guiding global content generation and scene-level consistency. 
 
+**For this paper, T5 encodes target replacement text (glyph prompt) only and CLIP encodes image description only (style prompt)**
+
 ### Dual Stream and Single Stream Transformer
 
 FLUX-Fill is a hybrid transformer design that alternates between dual-stream and single-stream blocks. FLUX-style double stream blocks commonly perform multimodal attention jointly while retaining separate image and text streams and separate modality specific projections. The single-stream blocks then concatenate the streams and process them with ordinary unified self-attention.
@@ -344,13 +346,13 @@ both visual and textual perspectives
   - Compute the maximal enclosing bounding rectangle of the
 masked area and crop the corresponding region from $I$ to obtain the visual style prompt $I_s$
   - This cropped patch encodes region-specific appearance information, such as color, texture, font characteristics, and local illumination, and serves as a visual reference for style preservation.
-- Textual: encode the input text description using the CLIP text encoder
+- Textual: encode the input text description using the **CLIP** text encoder
 
 ### Glyph Prompt Construction
 represents the desired textual structure and the semantic meanings of the text prompt
 
 - Target text is rendered into a single-line glyph image using the Pillow library, producing a whiteon-black glyph map $I_g$
-- Encode the target text string using the T5 text encoder
+- Encode the target text string using the **T5** text encoder
 - Resulting embeddings capture high-level semantic and syntactic information of the target text and are injected into the MMDiT backbone through cross attention
 
 ### Denoising Process
@@ -362,15 +364,21 @@ $I_{\text{input}} = \text{Concat}(I_g, I_s, I_m)$
 
 These three are concatenated along channel axis to form composite visual input. The composite input is encoded by a frozen VAE encoder to obtain the latent representation $z_0$, which is processed by the MMDiT backbone together with the textual glyph and style embeddings. After denoising, final latent is decoded back to image by VAE decoder. Since the masked image is used only for conditioning, the final output is obtained by cropping the decoded result to the spatial region corresponding to the target text area. 
 
-### Cooldown Training
+### Training
 
-#### Self Supervised Pretraining
+#### Dataset + Self Supervised Pretraining
 
-1. Use instruction based image editing model (Nano Banana Pro) to generate edited images conditioned on explicit editing instructions + Manually filter correct pairs
-  - Each data pair consists of an original image and a corresponding edited image (only target text is modified)
-2. First pretrain the model on the AnyWord-3M dataset, which provides large-scale self-supervised data for multilingual scene text rendering. 
+**Workflow: official pretrained FLUX-Fill → self supervised pretraining on Any-Word 3M → cooldown training**
+
+1. Cool down training dataset: Use instruction based image editing model (Nano Banana Pro) to generate edited images conditioned on explicit editing instructions + Manually filter correct pairs
+  - Each data pair consists of an original image and a corresponding edited image (only target text is modified) <br/>
+  **Annotators manually mark the edited text regions with bounding boxes, and those boxes are converted into training masks**
+2. Pretrain the model on the AnyWord-3M dataset, which provides large-scale self-supervised data for multilingual scene text rendering. 
   - Optimization objective: <br/>
   $\mathcal{L}_{\text{RF}} = \mathbb{E}_{z_0, z_1, t} \left[ \| v_\theta(z_t, t, c) - (z_1 - z_0) \|_2^2 \right].$
+  - AnyWord-3M contains 1.6M Chinese+1.39M English+10K multilingual images
+  - train on this dataset for one epoch
+  - freeze the encoder and decoder and train the diffusion Transformer backbone
 
 #### Cooldown Training
 
@@ -391,3 +399,50 @@ Model predicts the velocity field with objective
 
 $\mathcal{L}_{\text{CD}} = \mathbb{E}_t \left[ \|\hat{v}_\theta(z_t, t, c) - (z_0^{\text{tgt}} - z_0^{\text{src}})\|_2^2 \right]$
 - c includes the original text region as meta-information through the style prompt
+
+### Summary
+
+1. Mask the text region
+  - given source image $I$, create masked image $I_m$ <br/> $I_m = I \odot (1 - M)$
+  - binary mask is manually specified
+  - model receives both masked image and binary mask
+2. Visual style prompt
+  - The paper computes the smallest rectangle enclosing the masked text region
+  - It then crops this region from the unmasked original image
+3. Visual glyph prompt
+  - Render target string using Pillow into a white-on-black glyph image <br/>
+  $I_g = R(y_{\text{tgt}})$
+4. Composite visual input
+  - Concatenates three visual inputs along channel axis <br/>
+  $I_c = \text{Concat}_{\text{channel}}(I_{\text{mask}}, I_g, I_s)$
+5. VAE encoding
+  - Composite visual input is encoded by VAE encoder, creating a conditioning latents <br/>
+  $z_c = E_{\text{VAE}}(I_c)$
+  - VAE is frozen, so the authors do not train a new glyph encoder or style encoder. They rely on the pretrained image encoder to convert all three visual prompts into latent visual representations.
+  - mask is also resized or embedded into a latent-compatible representation <br/>
+  $m = E_M(M)$
+6. Textual glyph condition
+  - target text string is encoded with T5
+7. Textual style condition
+  - source image or source-text description is encoded with CLIP
+8. Construct interpolated target latent
+  - $z_t = (1 - t) z_0 + t z_1.$
+    - $z_1$: VAE encoded clean target image
+    - $z_0$: sampled gaussian noise
+    - $t$: timestep (between 0-1)
+9. Information enters MMDiT
+  - Ground truth velocity <br/>
+  $u_t = \frac{d z_t}{d t} = z_1 - z_0$
+  - MMDiT predicts <br/>
+  $\hat{u}_t = v_\theta (z_t, t, z_c, m, C_g, c_s)$
+    - $z_t$: current noisy latent being generated
+    - $t$: rectified flow timestep
+    - $z_c$: conditioning latent (latent encoding of visual prompts) <br/> $$z_c = E_{\text{VAE}}(\text{Concat}(I_{\text{mask}}, I_g, I_s))$$
+      - $I_{\text{mask}}$: masked source image
+      - $I_g$: rendered target glyph image
+      - $I_s$: cropepd visual style prompt
+    - m: embedded binary edit mask
+    - $C_g$: T5 encoding of target replacement text
+    - $c_s$: CLIP encoding of image description
+  - Loss <br/>
+  $\mathcal{L}_{\text{RF}} = \mathbb{E} \left[ \|v_\theta (z_t, t; z_c, m, C_g, c_s) - (z_1 - z_0)\|_2^2 \right]$
