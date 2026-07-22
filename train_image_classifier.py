@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import torch
-from PIL import Image
+from PIL import Image, ImageEnhance
 from torch import nn
 from torch.utils.data import DataLoader, Dataset
 
@@ -210,10 +210,17 @@ def build_samples(config: dict, config_path: Path) -> tuple[list[Sample], list[s
 
 
 class FolderImageDataset(Dataset):
-    def __init__(self, samples: list[Sample], image_size: int, train: bool) -> None:
+    def __init__(
+        self,
+        samples: list[Sample],
+        image_size: int,
+        train: bool,
+        augmentation: dict | None = None,
+    ) -> None:
         self.samples = samples
         self.image_size = image_size
         self.train = train
+        self.augmentation = augmentation or {}
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -221,12 +228,9 @@ class FolderImageDataset(Dataset):
     def __getitem__(self, index: int) -> dict:
         sample = self.samples[index]
         image = Image.open(sample.path).convert("RGB")
-        image = image.resize((self.image_size, self.image_size), Image.Resampling.BICUBIC)
-        tensor = torch.tensor(list(image.getdata()), dtype=torch.float32)
-        tensor = tensor.view(self.image_size, self.image_size, 3).permute(2, 0, 1) / 255.0
-        tensor = (tensor - 0.5) / 0.5
-        if self.train and random.random() < 0.5:
-            tensor = torch.flip(tensor, dims=(2,))
+        if self.train:
+            image = augment_image(image, self.augmentation)
+        tensor = image_to_tensor(image, self.image_size)
         return {
             "image": tensor,
             "object_label": torch.tensor(sample.object_label, dtype=torch.long),
@@ -234,6 +238,81 @@ class FolderImageDataset(Dataset):
             "text_class_label": torch.tensor(sample.text_class_label, dtype=torch.long),
             "path": str(sample.path),
         }
+
+
+def random_factor(strength: float) -> float:
+    return 1.0 + random.uniform(-strength, strength)
+
+
+def maybe_enhance(image: Image.Image, enhancer_class, strength: float) -> Image.Image:
+    if strength <= 0:
+        return image
+    return enhancer_class(image).enhance(random_factor(strength))
+
+
+def random_resized_crop(image: Image.Image, min_scale: float) -> Image.Image:
+    if min_scale >= 1.0:
+        return image
+    width, height = image.size
+    scale = random.uniform(min_scale, 1.0)
+    crop_width = max(1, int(width * scale))
+    crop_height = max(1, int(height * scale))
+    left = random.randint(0, max(0, width - crop_width))
+    top = random.randint(0, max(0, height - crop_height))
+    return image.crop((left, top, left + crop_width, top + crop_height))
+
+
+def random_translate(image: Image.Image, max_fraction: float) -> Image.Image:
+    if max_fraction <= 0:
+        return image
+    width, height = image.size
+    max_dx = int(width * max_fraction)
+    max_dy = int(height * max_fraction)
+    dx = random.randint(-max_dx, max_dx) if max_dx else 0
+    dy = random.randint(-max_dy, max_dy) if max_dy else 0
+    return image.transform(
+        image.size,
+        Image.Transform.AFFINE,
+        (1, 0, dx, 0, 1, dy),
+        resample=Image.Resampling.BICUBIC,
+        fillcolor=(255, 255, 255),
+    )
+
+
+def augment_image(image: Image.Image, augmentation: dict) -> Image.Image:
+    if random.random() > float(augmentation.get("probability", 1.0)):
+        return image
+
+    image = random_resized_crop(image, float(augmentation.get("random_resized_crop_min_scale", 0.9)))
+    image = random_translate(image, float(augmentation.get("translate_fraction", 0.03)))
+
+    rotation_degrees = float(augmentation.get("rotation_degrees", 8.0))
+    if rotation_degrees > 0:
+        angle = random.uniform(-rotation_degrees, rotation_degrees)
+        image = image.rotate(
+            angle,
+            resample=Image.Resampling.BICUBIC,
+            expand=False,
+            fillcolor=(255, 255, 255),
+        )
+
+    if bool(augmentation.get("horizontal_flip", False)) and random.random() < float(
+        augmentation.get("horizontal_flip_probability", 0.5)
+    ):
+        image = image.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+
+    image = maybe_enhance(image, ImageEnhance.Brightness, float(augmentation.get("brightness", 0.15)))
+    image = maybe_enhance(image, ImageEnhance.Contrast, float(augmentation.get("contrast", 0.15)))
+    image = maybe_enhance(image, ImageEnhance.Color, float(augmentation.get("color", 0.10)))
+    image = maybe_enhance(image, ImageEnhance.Sharpness, float(augmentation.get("sharpness", 0.10)))
+    return image
+
+
+def image_to_tensor(image: Image.Image, image_size: int) -> torch.Tensor:
+    image = image.resize((image_size, image_size), Image.Resampling.BICUBIC)
+    tensor = torch.tensor(list(image.getdata()), dtype=torch.float32)
+    tensor = tensor.view(image_size, image_size, 3).permute(2, 0, 1) / 255.0
+    return (tensor - 0.5) / 0.5
 
 
 class SmallCNN(nn.Module):
@@ -381,6 +460,7 @@ def main() -> None:
     config = read_config(config_path)
     image_size = int(config.get("image_size", 224))
     text_class_weight = float(config.get("text_class_loss_weight", 1.0))
+    augmentation = config.get("augmentation", {})
     samples, class_names = build_samples(config, config_path)
     if not class_names:
         raise ValueError("Config must define at least one text class in `text_classes`.")
@@ -394,8 +474,18 @@ def main() -> None:
     random.shuffle(shuffled_samples)
     train_samples = shuffled_samples[:train_count]
     val_samples = shuffled_samples[train_count:]
-    train_dataset = FolderImageDataset(train_samples, image_size=image_size, train=True)
-    val_dataset = FolderImageDataset(val_samples, image_size=image_size, train=False)
+    train_dataset = FolderImageDataset(
+        train_samples,
+        image_size=image_size,
+        train=True,
+        augmentation=augmentation,
+    )
+    val_dataset = FolderImageDataset(
+        val_samples,
+        image_size=image_size,
+        train=False,
+        augmentation={},
+    )
 
     train_loader = DataLoader(
         train_dataset,
@@ -416,6 +506,7 @@ def main() -> None:
 
     print(f"Loaded {len(samples)} images.")
     print(f"Text classes: {class_names}")
+    print(f"Augmentation: {augmentation if augmentation else 'disabled/default'}")
     print(f"Training on {device}.")
 
     best_val_loss = float("inf")

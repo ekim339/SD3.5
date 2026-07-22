@@ -1,6 +1,18 @@
 {
   "image_size": 224,
   "text_class_loss_weight": 1.0,
+  "augmentation": {
+    "probability": 1.0,
+    "rotation_degrees": 8.0,
+    "translate_fraction": 0.03,
+    "random_resized_crop_min_scale": 0.9,
+    "brightness": 0.15,
+    "contrast": 0.15,
+    "color": 0.1,
+    "sharpness": 0.1,
+    "horizontal_flip": false,
+    "horizontal_flip_probability": 0.5
+  },
   // total: 111+74+28+31+20+48+156+35+12=515
   "object_correct_folders": [
     "outputs/classifier_data/correct_letter_correct_object/hello",  // 111
