@@ -231,6 +231,22 @@ Flux-Fill generate the requested object inside the mask and make it geometricall
 - Rectified flow Transformer: The Transformer predicts the direction in which the current noisy latent should move $v_\theta(z_t, t, c, \text{image condition}, M).$
   - Then the sample updates $z_t \rightarrow z_{t-1}$
 
+**FLUX Guidance**
+- FLUX.1 [dev] was trained using guidance distillation. Its goal is to imitate a teacher model performing CFG, but using only one forward pass. The official model card identifies FLUX.1 [dev] as guidance-distilled, and the Transformer implementation explicitly supports a guidance embedding.
+- Suppose a teacher produces <br/>
+$v_{\text{teacher}}^{(s)} = v_{\text{uncond}} + s (v_{\text{cond}} - v_{\text{uncond}})$
+- The distilled FLUX model is trained to approximate that guided output directly <br/>
+$v_\theta(z_t, t, c, s) \approx v_{\text{teacher}}^{(s)}.$
+
+How the guidance scale enters FLUX:
+- Guidance scale $s \in \mathbb{R}$ and timestep $t$ are converted into an embedding <br/>
+$s \rightarrow e_s$ <br/>
+$t \rightarrow e_t$
+- FLUX combines these with pooled text conditioning to form a global modulation vector <br/>
+$h_{\text{global}} = f(e_t, e_s, c_{\text{CLIP}})$
+- This global vector modulates Transformer blocks, for example through adaptive normalization or learned gates <br/>
+$\text{AdaLN}(X; h_{\text{global}}) = \gamma(h_{\text{global}}) \odot \text{LN}(X) + \beta(h_{\text{global}})$
+
 ### OCR Encoder
 
 OCR encoder is the feature extraction part of an Optical Character Recognition model. It takes a text image and converts the visible character strokes into a sequence of visual features.
@@ -431,6 +447,8 @@ $\mathcal{L}_{\text{CD}} = \mathbb{E}_t \left[ \|\hat{v}_\theta(z_t, t, c) - (z_
     - $z_0$: sampled gaussian noise
     - $t$: timestep (between 0-1)
 9. Information enters MMDiT
+  - All glyph and style conditions are jointly fed into MMDiT, and the model uses a single global FLUX guidance value of 30.
+    - scalar guidance value is itself supplied to the Transformer as a conditioning signal
   - Ground truth velocity <br/>
   $u_t = \frac{d z_t}{d t} = z_1 - z_0$
   - MMDiT predicts <br/>
@@ -446,3 +464,87 @@ $\mathcal{L}_{\text{CD}} = \mathbb{E}_t \left[ \|\hat{v}_\theta(z_t, t, c) - (z_
     - $c_s$: CLIP encoding of image description
   - Loss <br/>
   $\mathcal{L}_{\text{RF}} = \mathbb{E} \left[ \|v_\theta (z_t, t; z_c, m, C_g, c_s) - (z_1 - z_0)\|_2^2 \right]$
+
+
+##  [GlyphMastero: A Glyph Encoder for High-Fidelity Scene Text Editing (CVPR 2025)](https://arxiv.org/pdf/2505.04915)
+
+Problems of earlier approaches:
+1. Earlier methods often pass OCR features directly into the diffusion model, but those features do not explicitly model the hierarchy strokes → characters → complete text line
+- GAN based methods: encountered challenges when dealing with complex text structures and diverse style variations, frequently resulting in generated text that exhibited unrealistic characteristics and compromised visual
+quality
+2. Diffusion based methods: 
+
+
+What this paper proposes: 
+- processes the target text at both the individual-character level and the whole-line level, then fuses them before conditioning the diffusion UNet
+- proposes GlyphMaestro, a specialized glyph encoder that gives the diffusion model stronger character-structure guidance. Built on a Stable Diffusion 2.1 inpainting UNet.
+
+## Preliminaries
+
+### Diffusion Based Methods Conditioning Strategy
+
+**Cross Attention Guidance**
+
+**Latent Space Guidance**s
+
+### 
+
+## Method
+
+### Masked Image Construction
+
+$x_m = x \odot (1 - m)$
+- m: binary mask indicating region to modify
+
+Concatenation along channel axis; <br/>
+$\hat{z}_t = [z_t; m; \mathcal{E}(x_m)]$
+- $z_t$: latent representation of masked image at timestpe t
+- $m$: mask
+- $\mathcal{E}()$: image encoder function
+
+### Dual Stream Glyoh Integration
+- PaddleOCR-v4 as feature extractor for input text
+- extract local level stream and global level stream and integrate these through cross-level and multi-scale fusion to derive fine-grained glyph guidance c
+
+**Local Stream Level**
+
+Given a text input y, render a series of single-character glyph images $x_l \in \mathbb{R}^{N \times H_l \times W_l},$
+- $N$: # chars
+- $H_l, W_l$: height and width of each chars
+
+OCR model’s last-layer backbone output $l_b$, and the neck output $l_n$, form the local-level stream feature representations.
+
+**Global Stream Level**
+
+Input text y is rendered as a unified glyph image $x_g \in \mathbb{R}^{H_g \times W_g}.$ 
+
+Neck output $g_n$ is extracted for subsequent prrocessing. 
+
+Unlike the local stream, we integrate M hierarchical backbone features (m=5 for PaddleOCR-v4) for the global stream through a FPN which fuses higher resolution, fine-grained features in shallow layers with semantic-rich features at lower resolutions in deeper layers, yielding the enhanced backbone features $g_b$.
+
+**Further Processing**
+
+- Employ two **glyph attention modules** $T_n$ and $T_b$ to capture interactions between local and global features for both the backbone and neck features.
+- The cross-level interaction-enhanced features $o_n, o_b \in \mathbb{R}^{N \times d_o}$ are then obtained through two glyph attention modules $T_n$ and $T_b$ <br/>
+$o_n = T_n(l_n, g_n), \quad o_b = T_b(l_b, g_b)$ 
+  - $d_o$: output dimension of glyph attention modules
+- Finally, an aggregator A concatenates and projects the two features <br/>
+  $c = A(o_b, o_n)$
+  - $c \in \mathbb{R}^{N \times D}$: guides the UNet during both training and inference phases of scene text editing through cross-attention
+  - $D=d_o$
+
+
+### Glyph Attention Module
+
+GOAL: to use cross-attention to capture the interaction between character-level local features and line-level global features to get a better representation of text glyphs
+
+1. repeat global feature $g \in \mathbb{R}^{1 \times d_g}$ N times to obtain $g \in \mathbb{R}^{N \times d_g}$ to match local features $l \in \mathbb{R}^{N \times d_l}$ sequence length
+2. Features $l$ and $\hat{g}$ are then projected to attention space dimension $\tilde{g}$ through learnable linear transformations $ψ_l$ and $ψ_g$
+  - Projected local features: $l^p = \psi_l(l)$
+  - Projected global features: $g^p = \psi_g(\hat{g})$
+  - both in $\mathbb{R}^{N \times \tilde{d}}$
+3. Add positional embeddings to the two streams of features with rotary positional embedding (RoPE) by <br/>
+$\bar{l}^p, \bar{g}^p = \text{RoPE}(l^p, g^p)$ <br/>
+4. To capture interactions between local and global representations, perform multi head cross attention where positionally encoded $\bar{l^p}$ serves as queries and $\bar{g^p}$ as keys and values followed by layer normalization (LN)
+- Produces attention map $z \in \mathbb{R}^{N \times \tilde{d}}.$
+5. Linear projection $ψ_o$ is applied to map $z$ from attention dimension $\tilde{d}$ to the output size $d_o$ with $o = \psi_o(z) \in \mathbb{R}^{N \times \tilde{d}}$
