@@ -479,6 +479,9 @@ What this paper proposes:
 - processes the target text at both the individual-character level and the whole-line level, then fuses them before conditioning the diffusion UNet
 - proposes GlyphMaestro, a specialized glyph encoder that gives the diffusion model stronger character-structure guidance. Built on a Stable Diffusion 2.1 inpainting UNet.
 
+Workflow: <br/>
+target string → glyph renderer → PaddleOCR-v4 → GlyphMastero encoder → cross-attention in SD2.1 UNet
+
 ## Preliminaries
 
 ### Diffusion Based Methods Conditioning Strategy
@@ -487,7 +490,9 @@ What this paper proposes:
 
 **Latent Space Guidance**s
 
-### 
+### OCR backbone vs neck features
+
+
 
 ## Method
 
@@ -505,10 +510,11 @@ $\hat{z}_t = [z_t; m; \mathcal{E}(x_m)]$
 ### Dual Stream Glyoh Integration
 - PaddleOCR-v4 as feature extractor for input text
 - extract local level stream and global level stream and integrate these through cross-level and multi-scale fusion to derive fine-grained glyph guidance c
+- target string is rendered twice
 
 **Local Stream Level**
 
-Given a text input y, render a series of single-character glyph images $x_l \in \mathbb{R}^{N \times H_l \times W_l},$
+Given a target string y, render a series of single-character glyph images $x_l \in \mathbb{R}^{N \times H_l \times W_l},$
 - $N$: # chars
 - $H_l, W_l$: height and width of each chars
 
@@ -548,3 +554,11 @@ $\bar{l}^p, \bar{g}^p = \text{RoPE}(l^p, g^p)$ <br/>
 4. To capture interactions between local and global representations, perform multi head cross attention where positionally encoded $\bar{l^p}$ serves as queries and $\bar{g^p}$ as keys and values followed by layer normalization (LN)
 - Produces attention map $z \in \mathbb{R}^{N \times \tilde{d}}.$
 5. Linear projection $ψ_o$ is applied to map $z$ from attention dimension $\tilde{d}$ to the output size $d_o$ with $o = \psi_o(z) \in \mathbb{R}^{N \times \tilde{d}}$
+
+### Glyph condition enters diffusion UNet
+
+- CFG guidance
+
+### Style
+- Glyph Maestro doesnt have a dedicated style encoder
+- Style is inferred from inpainting context (unmasked texts, background)
