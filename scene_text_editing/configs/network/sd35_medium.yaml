@@ -1,0 +1,19 @@
+name: sd35_medium
+backend: sd3_controlnet_inpaint
+architecture: sd3_transformer
+base_model_id: stabilityai/stable-diffusion-3.5-medium
+controlnet_model_id: alimama-creative/SD3-Controlnet-Inpainting
+revision: null
+variant: null
+use_safetensors: true
+extra_conditioning_channels: 1
+local_files_only: ${offline}
+enable_model_cpu_offload: true
+# The public inpainting ControlNet was trained for SD3 Medium, not SD3.5.
+# Opt in explicitly after validating the combination for your use case.
+allow_experimental_base_model: false
+supported_diffusions:
+  - flow_matching
+supports_inference: true
+supports_training: false
+lora_path: null

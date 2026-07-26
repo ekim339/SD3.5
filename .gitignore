@@ -13,3 +13,8 @@ outputs/
 
 .cache/
 models/
+
+# Hydra/model assets for scene_text_editing
+multirun/
+external/
+weights/

@@ -1,0 +1,9 @@
+name: dataset_b
+format: textctrl
+root_dir: scene_text_editing/data/text_image_editing/dataset_b
+source_dir: i_s
+source_labels: i_s.txt
+target_labels: i_t.txt
+target_dir: null
+mask_dir: null
+strict: true

@@ -1,0 +1,8 @@
+name: prompt_set_a
+template: >-
+  Preserve the composition, lighting, material, font style, color, and
+  perspective. Replace only the visible text "{source_text}" with the exact
+  text "{target_text}". The new text must be legible and correctly spelled.
+negative_prompt: >-
+  misspelled text, incorrect letters, duplicated characters, illegible text,
+  changed layout, changed background, watermark

@@ -1,0 +1,34 @@
+name: textctrl_sd15
+backend: textctrl_subprocess
+architecture: sd15_unet_textctrl
+base_model_id: stable-diffusion-v1-5/stable-diffusion-v1-5
+repository_url: https://github.com/weichaozeng/TextCtrl.git
+repository_dir: ${oc.env:TEXTCTRL_REPOSITORY,external/TextCtrl}
+repository_revision: ee086980b178fe1f10723fabe1ddc467237a1cea
+required_source_files:
+  - inference.py
+  - configs/inference.yaml
+  - configs/train.yaml
+  - src/MuSA/GaMuSA.py
+python_executable: ${oc.env:TEXTCTRL_PYTHON,python3}
+weights_dir: ${network.repository_dir}/weights
+checkpoint_path: ${network.weights_dir}/model.pth
+required_checkpoints:
+  - model.pth
+  - text_encoder.pth
+  - vision_model.pth
+required_training_checkpoints:
+  - style_encoder.pth
+  - ocr_model.pth
+  - vgg19.pth
+required_sd_components:
+  - sd/vae/config.json
+  - sd/vae/diffusion_pytorch_model.bin
+  - sd/unet/config.json
+  - sd/unet/diffusion_pytorch_model.bin
+  - sd/scheduler/scheduler_config.json
+supported_diffusions:
+  - pndm
+supports_inference: true
+supports_training: true
+starting_layer: 10

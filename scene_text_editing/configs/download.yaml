@@ -1,0 +1,19 @@
+defaults:
+  - network: sd3_inpainting
+  - override hydra/job_logging: disabled
+  - _self_
+
+offline: false
+dry_run: false
+download_base_model: true
+download_controlnet: true
+download_textctrl_assets: true
+download_textctrl_repository: true
+cache_dir: ${oc.env:HF_HUB_CACHE,${oc.env:HF_HOME,${oc.env:HOME}/.cache/huggingface}/hub}
+
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+  job:
+    chdir: false

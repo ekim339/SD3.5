@@ -1,0 +1,17 @@
+name: sd3_inpainting
+backend: sd3_controlnet_inpaint
+architecture: sd3_transformer
+base_model_id: stabilityai/stable-diffusion-3-medium-diffusers
+controlnet_model_id: alimama-creative/SD3-Controlnet-Inpainting
+revision: null
+variant: null
+use_safetensors: true
+extra_conditioning_channels: 1
+local_files_only: ${offline}
+enable_model_cpu_offload: true
+allow_experimental_base_model: false
+supported_diffusions:
+  - flow_matching
+supports_inference: true
+supports_training: false
+lora_path: null

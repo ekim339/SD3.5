@@ -1,0 +1,18 @@
+name: synthetic_textctrl
+format: textctrl_shards
+root_dir: ${oc.env:TEXTCTRL_SYNTHETIC_ROOT,scene_text_editing/data/text_image_editing/Syn_data}
+train_glob: train/train-*
+validation_glob: eval/eval-*
+source_dir: i_s
+target_dir: t_f
+source_labels: i_s.txt
+target_labels: i_t.txt
+source_mask_dir: mask_s
+target_mask_dir: mask_t
+text_render_dir: t_t
+background_dir: t_b
+font_labels: font.txt
+strict: true
+acquisition:
+  generator: https://github.com/youdao-ai/SRNet-Datagen
+  textctrl_modifications: https://github.com/weichaozeng/TextCtrl/tree/main/modify

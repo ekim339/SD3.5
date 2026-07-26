@@ -1,0 +1,16 @@
+name: text_image_editing
+description: Replace visible text while preserving the source image style.
+dataset: ???
+prompts: ???
+
+generation:
+  width: 1024
+  height: 1024
+  preserve_source_size: true
+  full_crop_mask_when_missing: true
+  controlnet_conditioning_scale: 0.95
+  max_sequence_length: 256
+  num_images_per_prompt: 1
+  negative_prompt: >-
+    deformed, distorted, disfigured, poorly drawn, bad anatomy, extra limbs,
+    blurry, unreadable text, misspelled text, duplicated letters, watermark

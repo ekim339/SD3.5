@@ -1,0 +1,12 @@
+name: textctrl_example
+format: textctrl
+root_dir: ${oc.env:TEXTCTRL_REPOSITORY,external/TextCtrl}/example
+source_dir: i_s
+source_labels: i_s.txt
+target_labels: i_t.txt
+target_dir: null
+mask_dir: null
+strict: true
+acquisition:
+  repository: https://github.com/weichaozeng/TextCtrl
+  note: The ten cropped inference examples are included in the upstream checkout.

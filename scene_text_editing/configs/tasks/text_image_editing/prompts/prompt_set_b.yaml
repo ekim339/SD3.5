@@ -1,0 +1,7 @@
+name: prompt_set_b
+template: >-
+  A faithful edit of the input image with the sign reading exactly
+  "{target_text}" instead of "{source_text}", retaining the original typography
+  and scene appearance.
+negative_prompt: >-
+  wrong words, spelling errors, extra text, blurry letters, style drift

@@ -1,0 +1,25 @@
+defaults:
+  - network: sd3_inpainting
+  - diffusion: flow_matching
+  - tasks/text_image_editing@task: task
+  - tasks/text_image_editing/datasets@task.dataset: dataset_a
+  - tasks/text_image_editing/prompts@task.prompts: prompt_set_a
+  - override hydra/job_logging: disabled
+  - _self_
+
+mode: inference
+seed: 42
+device: auto
+dtype: auto
+offline: false
+validate_only: false
+limit: null
+overwrite: false
+output_dir: outputs/scene_text_editing/${network.name}/${now:%Y-%m-%d_%H-%M-%S}
+
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+  job:
+    chdir: false

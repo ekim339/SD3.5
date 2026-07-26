@@ -1,0 +1,9 @@
+name: flow_matching
+scheduler_class: diffusers.FlowMatchEulerDiscreteScheduler
+prediction_type: flow
+scheduler_subfolder: scheduler
+num_inference_steps: 28
+guidance_scale: 7.0
+# null keeps the shift and sigma schedule stored with the pretrained model.
+shift: null
+use_dynamic_shifting: null

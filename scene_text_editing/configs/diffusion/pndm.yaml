@@ -1,0 +1,8 @@
+name: pndm
+scheduler_class: diffusers.PNDMScheduler
+prediction_type: epsilon
+scheduler_subfolder: scheduler
+num_inference_steps: 50
+guidance_scale: 2.0
+# Fixed by the released SD1.5 scheduler_config.json used by TextCtrl.
+skip_prk_steps: true

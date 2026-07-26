@@ -1,0 +1,5 @@
+name: dataset_a
+format: jsonl
+root_dir: scene_text_editing/data/text_image_editing/dataset_a
+manifest: manifest.jsonl
+strict: true

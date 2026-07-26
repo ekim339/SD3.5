@@ -1,12 +1,16 @@
+> **Implemented:** the Hydra configs, datasets, prompt sets, SD3/TextCtrl
+> backends, checkpoint downloader, inference runner, and fine-tuning handoff
+> are documented in [USAGE.md](USAGE.md).
+
 ### Design a Text to Image Editing repository:
 
-1. Reference Code: 
+1. Reference Code: /home/ekim339/project/SD3.5
 
 2. Reference Code: https://github.com/weichaozeng/TextCtrl
 
 3. Key Features to import:
 
-- Keep hydra configs structure for network, diffusion. Note that my repository is only for inference on SDXL. Adapt this for finetuning if required.
+- Keep hydra configs structure for network, diffusion. Note that my repository is only for inference on SD3.5. Adapt this for finetuning if required.
 - Introduce a new folder for dataset and capture the dataset that the reference code has used. Update networks to support any models that are used in the reference code.
 - I would like you to define a folder called "tasks" inside configs. Why? Because I want to define a new task of image editing based of text image editing in the reference code. This will formulate the task of image editing.
 *USE HYDRA
