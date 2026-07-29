@@ -20,3 +20,5 @@ external/
 weights/
 
 experiments/results/
+!experiments/md_images/
+!experiments/md_images/*.png
