@@ -17,6 +17,7 @@ models/
 # Hydra/model assets for scene_text_editing
 multirun/
 external/
+other_codes/
 weights/
 
 experiments/results/
