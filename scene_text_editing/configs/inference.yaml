@@ -1,6 +1,6 @@
 defaults:
-  - network: sd3_inpainting
-  - diffusion: flow_matching
+  - network: textctrl_sd15
+  - diffusion: pndm
   - tasks/text_image_editing@task: task
   - tasks/text_image_editing/datasets@task.dataset: dataset_a
   - tasks/text_image_editing/prompts@task.prompts: prompt_set_a
@@ -15,7 +15,7 @@ offline: false
 validate_only: false
 limit: null
 overwrite: false
-output_dir: outputs/scene_text_editing/${network.name}/${now:%Y-%m-%d_%H-%M-%S}
+output_dir: experiments/results/${network.name}/${now:%Y-%m-%d_%H-%M-%S}
 
 hydra:
   run:

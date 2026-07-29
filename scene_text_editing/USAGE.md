@@ -156,19 +156,18 @@ Preview any acquisition without downloading:
 python3 -m scene_text_editing.download_models dry_run=true
 ```
 
-Download the default SD3 Medium base model and its public inpainting
-ControlNet to the Hugging Face cache:
+Download the default TextCtrl checkout, released Google Drive checkpoints, and the
+SD1.5 VAE/UNet/scheduler:
 
 ```bash
 python3 -m scene_text_editing.download_models
 ```
 
-Download the TextCtrl checkout, released Google Drive checkpoints, and the
-SD1.5 VAE/UNet/scheduler:
+To download the SD3 base model and its public inpainting ControlNet instead:
 
 ```bash
 python3 -m scene_text_editing.download_models \
-  network=textctrl_sd15
+  network=sd3_inpainting
 ```
 
 The released Google Drive bundle includes a `Usage Restriction Statement`.

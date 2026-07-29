@@ -457,7 +457,8 @@ class TextCtrlSubprocessBackend:
             )
 
             worker = (
-                Path(__file__).with_name("textctrl_inference_worker.py").resolve()
+                Path(__file__).resolve().parent.parent
+                / "textctrl_inference_worker.py"
             )
             command = [
                 str(self.network.get("python_executable", "python3")),

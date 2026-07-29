@@ -27,11 +27,11 @@ def compose_mapping(
 
 
 class ConfigurationTests(unittest.TestCase):
-    def test_default_inference_is_sd3_flow_matching(self) -> None:
+    def test_default_inference_is_textctrl_sd15_pndm(self) -> None:
         config = compose_mapping()
         validate_config(config)
-        self.assertEqual(config["network"]["name"], "sd3_inpainting")
-        self.assertEqual(config["diffusion"]["name"], "flow_matching")
+        self.assertEqual(config["network"]["name"], "textctrl_sd15")
+        self.assertEqual(config["diffusion"]["name"], "pndm")
         self.assertEqual(config["task"]["dataset"]["name"], "dataset_a")
         self.assertEqual(config["task"]["prompts"]["name"], "prompt_set_a")
 
@@ -42,7 +42,9 @@ class ConfigurationTests(unittest.TestCase):
         validate_config(config)
 
     def test_textctrl_rejects_flow_matching(self) -> None:
-        config = compose_mapping(overrides=["network=textctrl_sd15"])
+        config = compose_mapping(
+            overrides=["network=textctrl_sd15", "diffusion=flow_matching"]
+        )
         with self.assertRaisesRegex(ConfigurationError, "does not support"):
             validate_config(config)
 
@@ -55,12 +57,16 @@ class ConfigurationTests(unittest.TestCase):
             validate_config(config)
 
     def test_sd3_rejects_pndm(self) -> None:
-        config = compose_mapping(overrides=["diffusion=pndm"])
+        config = compose_mapping(
+            overrides=["network=sd3_inpainting", "diffusion=pndm"]
+        )
         with self.assertRaisesRegex(ConfigurationError, "does not support"):
             validate_config(config)
 
     def test_sd35_requires_explicit_experimental_opt_in(self) -> None:
-        config = compose_mapping(overrides=["network=sd35_medium"])
+        config = compose_mapping(
+            overrides=["network=sd35_medium", "diffusion=flow_matching"]
+        )
         with self.assertRaisesRegex(ConfigurationError, "trained for SD3 Medium"):
             validate_config(config)
         config["network"]["allow_experimental_base_model"] = True

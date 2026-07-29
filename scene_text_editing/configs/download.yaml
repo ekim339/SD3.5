@@ -1,5 +1,5 @@
 defaults:
-  - network: sd3_inpainting
+  - network: textctrl_sd15
   - override hydra/job_logging: disabled
   - _self_
 

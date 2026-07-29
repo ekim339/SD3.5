@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
-MODEL_ID = "stabilityai/stable-diffusion-3.5-medium"
+MODEL_ID = "stabilityai/stable-diffusion-3.5-large"
 CLIP_SEQUENCE_LENGTH = 77
 T5_SEQUENCE_LENGTH = 256
 CLIP_L_CHANNELS = (0, 768)

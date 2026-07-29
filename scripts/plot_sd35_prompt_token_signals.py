@@ -25,7 +25,7 @@ import textwrap
 from pathlib import Path
 
 
-MODEL_ID = "stabilityai/stable-diffusion-3.5-medium"
+MODEL_ID = "stabilityai/stable-diffusion-3.5-large"
 
 torch = None
 CLIPTextModelWithProjection = None
