@@ -1,0 +1,99 @@
+defaults:
+  - override hydra/job_logging: disabled
+  - _self_
+
+dataset_dir: datasets/COCO_Text
+labels_file: labels.json
+output_dir: results/coco_text_textctrl_sd35_collage
+collage_filename: comparison_collage.png
+sample_count: 10
+target_seed: 42
+overwrite: false
+
+noise:
+  seed: 2026
+  minimum_standard_deviation: 4.0
+  maximum_standard_deviation: 16.0
+
+crop:
+  padding_ratio: 0.25
+  minimum_padding_pixels: 4
+
+textctrl:
+  python_executable: ${oc.env:TEXTCTRL_PYTHON,/home/ekim339/miniconda3/envs/textctrl/bin/python}
+  repository_dir: networks/external/TextCtrl
+  checkpoint_path: networks/external/TextCtrl/weights/model.pth
+  ocr_checkpoint_path: networks/external/TextCtrl/weights/ocr_model.pth
+  starting_layer: 10
+  num_inference_steps: 50
+  guidance_scale: 2.0
+
+seed: 42
+device: auto
+dtype: auto
+offline: false
+
+network:
+  base_model_id: stabilityai/stable-diffusion-3.5-medium
+  checkpoint_path: checkpoints/sd35_scene_text_sd3_inpaint_dual_prompt_style_pad_200k/adapters-015000.pt
+  implementation_dir: networks/sd35_implementation
+  textctrl_repository: networks/external/TextCtrl
+  style_checkpoint: ${network.textctrl_repository}/weights/style_encoder.pth
+  glyph_checkpoint: ${network.textctrl_repository}/weights/text_encoder.pth
+  fill_value: 0.5
+  width: 512
+  height: 512
+  revision: null
+  variant: null
+  local_files_only: ${offline}
+  lora:
+    rank: 16
+    alpha: 16
+    dropout: 0.0
+    target_modules: [to_q, to_k, to_v, to_out.0]
+
+diffusion:
+  num_inference_steps: 40
+  guidance_scale: 5.0
+
+conditioning:
+  target_text_max_length: 256
+
+prompt:
+  template: >-
+    Preserve the composition, lighting, material, font style, color, and
+    perspective. Replace only the visible text "{source_text}" with the exact
+    text "{target_text}". The new text must be legible and correctly spelled.
+  negative_prompt: >-
+    misspelled text, incorrect letters, duplicated characters, illegible text,
+    changed layout, changed background, watermark
+
+generation:
+  preserve_source_size: true
+  full_crop_mask_when_missing: false
+  allow_upscale: true
+  mask_expand_pixels: 12
+  mask_feather_pixels: 4.0
+  max_sequence_length: 256
+
+ocr:
+  python_executable: ${textctrl.python_executable}
+  repository_dir: ${textctrl.repository_dir}
+  checkpoint_path: ${textctrl.ocr_checkpoint_path}
+
+collage:
+  cell_width: 250
+  image_height: 160
+  caption_height: 82
+  cell_padding: 8
+  border_width: 1
+  font_path: /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+  bold_font_path: /usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf
+
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+  job:
+    chdir: false
+

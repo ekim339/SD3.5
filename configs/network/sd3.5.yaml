@@ -1,0 +1,23 @@
+name: sd3.5
+backend: sd35_lora
+base_model_id: stabilityai/stable-diffusion-3.5-medium
+revision: null
+variant: null
+local_files_only: ${offline}
+textctrl_repository: networks/external/TextCtrl
+style_checkpoint: ${network.textctrl_repository}/weights/style_encoder.pth
+glyph_checkpoint: ${network.textctrl_repository}/weights/text_encoder.pth
+fill_value: 0.5
+training_mode: lora
+gradient_checkpointing: true
+enable_xformers: false
+max_prompt_length: 256
+conditioning:
+  glyph_gate_init: 0.1
+  style_gate_init: 0.1
+  target_text_max_length: 256
+lora:
+  rank: 16
+  alpha: 16
+  dropout: 0.0
+  target_modules: [to_q, to_k, to_v, to_out.0]

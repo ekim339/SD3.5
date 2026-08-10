@@ -1,0 +1,19 @@
+name: srnet
+format: textctrl_shards
+root_dir: datasets/SRNet_Datagen
+train_glob: train/train-*
+validation_glob: eval/eval-*
+source_dir: i_s
+target_dir: t_f
+source_labels: i_s.txt
+target_labels: i_t.txt
+source_mask_dir: mask_s
+strict: true
+training_roots:
+  - datasets/SRNet_Datagen/train/train-50k-1
+  - datasets/SRNet_Datagen/train/train-50k-2
+  - datasets/SRNet_Datagen/train/train-50k-3
+  - datasets/SRNet_Datagen/train/train-50k-4
+resolution: 512
+style_resolution: 256
+fill_value: 0.5

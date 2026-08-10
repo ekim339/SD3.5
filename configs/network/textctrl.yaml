@@ -1,0 +1,21 @@
+name: textctrl
+backend: textctrl_subprocess
+base_model_id: stable-diffusion-v1-5/stable-diffusion-v1-5
+repository_dir: ${oc.env:TEXTCTRL_REPOSITORY,networks/external/TextCtrl}
+python_executable: ${oc.env:TEXTCTRL_PYTHON,python3}
+weights_dir: ${network.repository_dir}/weights
+checkpoint_path: ${model.checkpoint}
+required_source_files:
+  - inference.py
+  - configs/inference.yaml
+  - configs/train.yaml
+  - src/MuSA/GaMuSA.py
+required_checkpoints: [model.pth, text_encoder.pth, vision_model.pth]
+required_training_checkpoints: [style_encoder.pth, ocr_model.pth, vgg19.pth]
+required_sd_components:
+  - sd/vae/config.json
+  - sd/vae/diffusion_pytorch_model.bin
+  - sd/unet/config.json
+  - sd/unet/diffusion_pytorch_model.bin
+  - sd/scheduler/scheduler_config.json
+starting_layer: 10

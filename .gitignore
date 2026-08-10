@@ -23,3 +23,8 @@ weights/
 experiments/results/
 !experiments/md_images/
 !experiments/md_images/*.png
+
+results/
+datasets/
+checkpoints/
+legacy/classifier_runs/

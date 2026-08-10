@@ -1,0 +1,85 @@
+defaults:
+  - override hydra/job_logging: disabled
+  - _self_
+
+seed: 123
+device: auto
+dtype: auto
+offline: false
+validate_only: false
+limit: null
+overwrite: true
+output_dir: results/sd35_scene_text_sd3_inpaint_dual_prompt_style_pad_200k/${now:%Y-%m-%d_%H-%M-%S}
+
+network:
+  base_model_id: stabilityai/stable-diffusion-3.5-medium
+  checkpoint_path: checkpoints/sd35_scene_text_sd3_inpaint_dual_prompt_style_pad_200k/adapters-015000.pt
+  implementation_dir: networks/sd35_implementation
+  textctrl_repository: networks/external/TextCtrl
+  style_checkpoint: ${network.textctrl_repository}/weights/style_encoder.pth
+  glyph_checkpoint: ${network.textctrl_repository}/weights/text_encoder.pth
+  fill_value: 0.5
+  width: 512
+  height: 512
+  revision: null
+  variant: null
+  local_files_only: ${offline}
+  lora:
+    rank: 16
+    alpha: 16
+    dropout: 0.0
+    target_modules: [to_q, to_k, to_v, to_out.0]
+
+diffusion:
+  num_inference_steps: 40
+  guidance_scale: 5.0
+  glyph_gate_init: 0.1
+  style_gate_init: 0.1
+
+# `direct` edits one exact image. `dataset` uses the dataset block below.
+conditioning:
+  target_text_max_length: 256
+
+input:
+  mode: direct  # direct or dataset
+  sample_id: hello_to_hello_exclamation
+  source_image: datasets/custom/images/hello.png
+  mask_image: datasets/custom/masks/hello_mask.png
+  source_text: "HELLO"
+  target_text: "HELLO!"
+
+dataset:
+  name: dataset_a
+  format: jsonl  # jsonl or textctrl
+  root_dir: datasets/custom
+  manifest: manifest.jsonl
+  source_dir: i_s
+  source_labels: i_s.txt
+  target_labels: i_t.txt
+  mask_dir: mask_s
+  strict: true
+
+prompt:
+  template: >-
+    Preserve the composition, lighting, material, font style, color, and
+    perspective. Replace only the visible text "{source_text}" with the exact
+    text "{target_text}". The new text must be legible and correctly spelled.
+  negative_prompt: >-
+    misspelled text, incorrect letters, duplicated characters, illegible text,
+    changed layout, changed background, watermark
+
+generation:
+  preserve_source_size: true
+  full_crop_mask_when_missing: true
+  allow_upscale: false
+  # Give new glyphs room beyond tight source-text masks and soften the blend edge.
+  mask_expand_pixels: 12
+  mask_feather_pixels: 4.0
+  max_sequence_length: 256
+
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+  job:
+    chdir: false

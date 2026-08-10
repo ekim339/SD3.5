@@ -1,0 +1,72 @@
+defaults:
+  - network: sd3.5
+  - dataset: custom
+  - detector: none
+  - diffusion: auto
+  - override hydra/job_logging: disabled
+  - _self_
+
+# The only entry point switch: inference generates samples; train fine-tunes.
+mode: inference
+seed: 42
+device: auto
+dtype: auto
+offline: false
+validate_only: false
+limit: null
+overwrite: false
+
+model:
+  # Used as the adapter checkpoint for sd3.5 and the model checkpoint for TextCtrl.
+  checkpoint: checkpoints/sd35_scene_text_sd3_inpaint_dual_prompt_style_pad_200k/adapters-015000.pt
+
+output_dir: results/${network.name}/${mode}/${now:%Y-%m-%d_%H-%M-%S}
+
+prompt:
+  template: >-
+    Preserve the composition, lighting, material, font style, color, and
+    perspective. Replace only the visible text "{source_text}" with the exact
+    text "{target_text}". The new text must be legible and correctly spelled.
+  negative_prompt: >-
+    misspelled text, incorrect letters, duplicated characters, illegible text,
+    changed layout, changed background, watermark
+
+generation:
+  width: 512
+  height: 512
+  preserve_source_size: true
+  full_crop_mask_when_missing: true
+  allow_upscale: false
+  mask_expand_pixels: 12
+  mask_feather_pixels: 4.0
+  max_sequence_length: 256
+
+training:
+  execute: true
+  output_dir: checkpoints/${network.name}
+  batch_size: 1
+  num_workers: 4
+  learning_rate: 1.0e-4
+  weight_decay: 0.01
+  max_steps: 50000
+  max_epochs: 100
+  gradient_accumulation_steps: 4
+  accumulate_grad_batches: 8
+  mixed_precision: bf16
+  precision: 32
+  foreground_loss_weight: 5.0
+  background_loss_weight: 1.0
+  uppercase_sampling_fraction: 0.4
+  log_every: 10
+  save_every: 2500
+  checkpoint_every_n_epochs: 10
+  sd_locked: false
+  accelerator: gpu
+  strategy: ddp
+
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+  job:
+    chdir: false

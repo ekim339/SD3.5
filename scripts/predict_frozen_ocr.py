@@ -19,7 +19,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("image_dir", type=Path)
     parser.add_argument("output_csv", type=Path)
-    parser.add_argument("--textctrl-dir", type=Path, default=Path("external/TextCtrl"))
+    parser.add_argument("--textctrl-dir", type=Path, default=Path("networks/external/TextCtrl"))
     parser.add_argument("--batch-size", type=int, default=32)
     return parser.parse_args()
 

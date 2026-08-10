@@ -1,0 +1,72 @@
+defaults:
+  - _self_
+
+seed: 42
+model:
+  pretrained_model: stabilityai/stable-diffusion-3.5-medium
+  revision: null
+  dtype: bfloat16
+  gradient_checkpointing: true
+  enable_xformers: false
+  training_mode: lora  # frozen, lora, or full
+  max_prompt_length: 256
+  lora:
+    rank: 16
+    alpha: 16
+    dropout: 0.0
+    target_modules:
+      - to_q
+      - to_k
+      - to_v
+      - to_out.0
+
+dataset:
+  roots:
+    - datasets/SRNet_Datagen/train/train-50k-1
+    - datasets/SRNet_Datagen/train/train-50k-2
+    - datasets/SRNet_Datagen/train/train-50k-3
+    - datasets/SRNet_Datagen/train/train-50k-4
+  resolution: 512
+  style_resolution: 256
+  fill_value: 0.5
+  limit: null
+
+encoders:
+  textctrl_repository: networks/external/TextCtrl
+  style_checkpoint: networks/external/TextCtrl/weights/style_encoder.pth
+  glyph_checkpoint: networks/external/TextCtrl/weights/text_encoder.pth
+  style_tokens: 256
+  style_dim: 768
+  glyph_tokens: 24
+  glyph_dim: 768
+  condition_dim: 4096
+
+conditioning:
+  # Start with a usable glyph signal instead of waiting for a zero gate to open.
+  glyph_gate_init: 0.1
+  style_gate_init: 0.1
+  target_text_max_length: 256
+
+prompt:
+  template: >-
+    Replace "{source_text}" with "{target_text}" in the marked region
+    while preserving the original font, color, geometry, lighting,
+    texture, and background.
+
+training:
+  output_dir: checkpoints/sd35_scene_text_sd3_inpaint_dual_prompt_style_pad_200k
+  batch_size: 1
+  num_workers: 4
+  learning_rate: 1.0e-4
+  weight_decay: 0.01
+  # Emphasize exact text reconstruction while still preserving the background.
+  foreground_loss_weight: 5.0
+  background_loss_weight: 1.0
+  # Half of sampled targets contain uppercase characters despite dataset imbalance.
+  uppercase_sampling_fraction: 0.4
+  max_steps: 50000
+  gradient_accumulation_steps: 4
+  mixed_precision: bf16
+  log_every: 10
+  save_every: 2500
+

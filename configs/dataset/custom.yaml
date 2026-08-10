@@ -1,0 +1,13 @@
+name: custom
+format: jsonl
+root_dir: datasets/custom
+manifest: manifest.jsonl
+strict: true
+training_roots:
+  - datasets/SRNet_Datagen/train/train-50k-1
+  - datasets/SRNet_Datagen/train/train-50k-2
+  - datasets/SRNet_Datagen/train/train-50k-3
+  - datasets/SRNet_Datagen/train/train-50k-4
+resolution: 512
+style_resolution: 256
+fill_value: 0.5

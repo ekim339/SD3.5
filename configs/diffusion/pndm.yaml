@@ -1,0 +1,5 @@
+name: pndm
+num_inference_steps: 50
+guidance_scale: 2.0
+prediction_type: epsilon
+skip_prk_steps: true

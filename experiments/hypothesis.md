@@ -27,7 +27,7 @@ I editied the source text 'HELLO' into various target texts. Font of the source 
 
 I use 4 fonts to compare the results: Canva Sans, Times New Roman, Shrikhand, and Anton. Canva Sans is the simplest font with least details.
 
-- Model does not generate spacial characters well for all fonts (HELLO!, ., !!!)
+- Model does not generate special characters well for all fonts (HELLO!, ., !!!)
 - Model successfully performs edit to a target text only involving letters for all fonts (HELL)
 - Overall there is not much performance difference across these four fonts
   - There are not enough examples so I can't confidently say but from the results below Shrikhand appears to be strongest overall (highest NED with second lowest CER) and Times New Roman appears to be the weakest since its CER is substantially higheer
@@ -76,3 +76,34 @@ From previous experiment I found that model does not perform well with special c
 
 - Model successfully performs edit if target string is letters, even if source string are special characters. It is still poor at editing the text to special characters even though the source text is special characters.
   - Visual fidelity is worse than when source text was letters but it is still being recognized well by OCR
+
+# 2. Implementation on SD3.5
+
+SD1.5
+- Glyph condition: cross attention
+- Style condition: UNet feature injection
+  - Injected to UNet middle block and skip connection
+
+SD3.5
+- Give glyph condition and style condition as the condition for SD3.5 MMDiT
+- However I would have to generate my own dataset
+
+
+## Next Task
+
+**Add noise to image and see how they perform**
+- evaulate across 1K samples
+- keep 5 source chars and 5 target chars
+- 4-5 diff combos of source chars and 4-5 combos of target chars: create confusion matrix
+- compare side by side with sd3.5
+
+1. training diffusion model to do this without explicit glyph guidance (no encoders)
+- merits of removing glyph encoder vs using
+- find holes in previous papers work
+- if you train from scratch would it generalize better for special chars
+- look for papers that have done this from scratch
+
+2. find a way the glyph representation and t5 representation come close by so you dont have to use glyph encoder
+- replace hello to xyz -> representation space of t5 and glyph enocder is diff -> how can we bring this closer
+
+##

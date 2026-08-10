@@ -465,6 +465,21 @@ $\mathcal{L}_{\text{CD}} = \mathbb{E}_t \left[ \|\hat{v}_\theta(z_t, t, c) - (z_
   - Loss <br/>
   $\mathcal{L}_{\text{RF}} = \mathbb{E} \left[ \|v_\theta (z_t, t; z_c, m, C_g, c_s) - (z_1 - z_0)\|_2^2 \right]$
 
+### Limitations
+
+1. Text-length changes are poorly handled
+  - few to many or many to few
+  - The model receives a fixed target mask, but it does not explicitly optimize typography variables such as font size, character spacing, line breaking etc
+  - A stronger system could first predict a target layout $L_{\text{target}} = f(\boldsymbol{y}_{\text{target}}, M, I_{\text{source}})$ and then render the glyph prompt according to that predicted layout
+2. It does not properly support multiline text
+  - The visual glyph prompt is rendered as a single line using Pillow
+3. Performance degrades for long text
+  - The appendix reports that quality starts degrading when text exceeds approximately 16 characters, producing stroke distortion and reduced structural consistency
+4. The “style prompt” is not actually style-disentangled
+  - The visual style prompt is simply a crop of the original text region which includes undesired content
+  - The paper itself observes that adding style prompts during self-supervised pretraining can degrade results because the source and target text are identical. The model learns copying behavior rather than true style transfer.
+  - How does the model extract source style without copying the original glyph?
+
 
 ##  [GlyphMastero: A Glyph Encoder for High-Fidelity Scene Text Editing (CVPR 2025)](https://arxiv.org/pdf/2505.04915)
 

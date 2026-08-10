@@ -1,0 +1,3 @@
+name: abinet
+enabled: true
+checkpoint: networks/external/TextCtrl/weights/ocr_model.pth

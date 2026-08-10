@@ -1,0 +1,4 @@
+name: flow_matching
+num_inference_steps: 40
+guidance_scale: 5.0
+prediction_type: flow

@@ -1,0 +1,34 @@
+dataset_dir: datasets/COCO_Text
+labels_file: labels.json
+output_dir: results/coco_text_textctrl_sd15
+
+# The released TextCtrl runtime is pinned to its Python 3.8 environment.
+textctrl:
+  python_executable: ${oc.env:TEXTCTRL_PYTHON,/home/ekim339/miniconda3/envs/textctrl/bin/python}
+  repository_dir: networks/external/TextCtrl
+  checkpoint_path: networks/external/TextCtrl/weights/model.pth
+  ocr_checkpoint_path: networks/external/TextCtrl/weights/ocr_model.pth
+  starting_layer: 10
+  num_inference_steps: 50
+  guidance_scale: 2.0
+
+seed: 42
+limit: null
+overwrite: false
+
+# Gaussian noise is applied in RGB pixel space before the annotated word crop
+# is extracted. Set standard_deviation to 0 to disable it.
+noise:
+  standard_deviation: 8.0
+
+# TextCtrl is a word-crop editor. Expand the selected COCO-Text annotation so
+# it retains some surrounding style/background context.
+crop:
+  padding_ratio: 0.25
+  minimum_padding_pixels: 4
+
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+
