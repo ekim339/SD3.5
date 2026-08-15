@@ -25,11 +25,13 @@ experiments/results/
 !experiments/md_images/*.png
 experiments/comparisons
 experiments/cosine_similarity
-experiments/glyph_encoder
+experiments/glyph_encoder/*
 !experiments/glyph_encoder/glyph_encoder.md
+!experiments/glyph_encoder/results/
+experiments/glyph_encoder/results/*
 !experiments/glyph_encoder/results/*.csv
 
-results/
+/results/
 datasets/
 checkpoints/
 legacy/classifier_runs/
