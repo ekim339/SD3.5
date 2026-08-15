@@ -30,9 +30,8 @@ experiments/glyph_encoder/*
 !experiments/glyph_encoder/results/
 experiments/glyph_encoder/results/*
 !experiments/glyph_encoder/results/*.csv
-!experiments/glyph_encoder/results/collage.png
 
-/results/
+results/
 datasets/
 checkpoints/
 legacy/classifier_runs/

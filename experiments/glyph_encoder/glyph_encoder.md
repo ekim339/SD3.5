@@ -99,3 +99,12 @@ Second row will show the edited image with each combinations. Above each images 
 - TextCtrl tolerates moderate Gaussian corruption. Results remain nearly unchanged through noise scales 0-0.3 which suggests the glyph representation has some local robustness.
 - Performance collapses between 30% and 50% masking. Once half the glyph embedding is masked, none of the 50 outputs are exactly correct under any averaged condition.
 - Increasing glyph guidance doesn't always bring performance improvement. Default guidance scale for TextCtrl is 2 but 3 seems to perform slightly better.
+
+## Visualization
+
+Each column represents different samples. First row shows original source image + nosie added. Second row and below shows edited image with various parameter combinations. Exact parameter values used is written above each image in the order of [Gauissian noise scale, masking proportion, guidance scale]. 
+
+E.g. [1, 0, 2]: Gaussian corruption scale 1, masking proprtion 0 (no masking), guidance scale 2
+- Second row [0, 0, 2] is the default setting for TextCtrl
+
+![](../glyph_encoder/results/collage.png)
