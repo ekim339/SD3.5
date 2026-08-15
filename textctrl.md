@@ -71,3 +71,23 @@ Concatenate $C=[T; G; S]$ along the channel axis and C enters MMDiT as a conditi
 - Dataset: datasets/SRNet_Datagen/train/train-50k-1
 - Ckpt: checkpoints/sd35_scene_text_glyph_weighted/adapters-010000.pt
 
+
+## Failures in TextCtrl
+
+- Use SRNet test set for the evaluation
+
+- Dig in to why it is failing
+  - Architecture breakdown for TextCtrl
+    - Abalation by removing individual components; which one has greatest effect on accuracy
+    - stick with SD1.5+TextCtrl and change configs
+
+  - Make another report
+
+- Control glyph guidance vectors
+  - way to destroy the vector: add Gussian noise of varying magnitude, masking (randomly; certain %)
+  - How dependent is text guidance in glyph guidance?
+  - 5*5*5 (5 guidance scale, 5 gaussian noise, 5 masking %)
+
+- Create one single report : what is the most important
+
+- 
