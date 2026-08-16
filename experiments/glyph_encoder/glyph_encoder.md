@@ -10,6 +10,32 @@ Next, randomly sample combinations of 5 characters for each images. These string
 
 You will have 3 parameters/modifications. Sweep accross these 3 parameters. You have 5 grids for each parameters. Therefore there should initally be 5*5*5=125 combinations.
 
+## Dataset
+
+SRNet-Datagen is a synthetic data generator originally built for SRNet (“Editing Text in the Wild”). Its purpose is to generate paired scene-text editing examples where the background and text style are controlled, but the text content can be changed. I used the SRNet Datagen generator to generate 200k samples and we are using 50 samples with a text of 5 characters from this dataset. 
+
+For one generated sample, SRNet-Datagen creates several aligned images: 
+
+$(i_s, i_t, t_{sk}, t_t, t_b, t_f, mask_t)$
+
+| Variable | Meaning                                                                        |
+| -------- | ------------------------------------------------------------------------------ |
+| (i_s)    | source image: styled source text (A) rendered on a background                  |
+| (i_t)    | target text (B) rendered in a standard font on a gray background               |
+| (t_{sk}) | skeletonized mask of the target text                                           |
+| (t_t)    | target text (B) rendered with the desired style on a gray background           |
+| (t_b)    | clean background image                                                         |
+| (t_f)    | final target image: styled target text (B) composited onto the same background |
+| (mask_t) | binary mask of the target text region                                          |
+
+Example of the samples used:
+
+![](../glyph_encoder/results/inputs/0000_47442.png)
+![](../glyph_encoder/results/inputs/0001_09864.png)
+![](../glyph_encoder/results/inputs/0002_05542.png)
+![](../glyph_encoder/results/inputs/0003_30959.png)
+![](../glyph_encoder/results/inputs/0004_37280.png)
+
 ## 1. Gaussian noise corruption
 
 For each target text, extract the glyph features from glyph encoder. There will be one vector for each character / tokens. Before feeding this glyph features into SD1.5, add Gaussian noise to these vectors.
@@ -80,24 +106,40 @@ Second row will show the edited image with each combinations. Above each images 
 | `gaussian_noise_scale=0.3` | 0.083200/0.276184 | 0.387543/0.301668 | 0.892640/0.594018 |
 | `gaussian_noise_scale=0.5` | 0.070400/0.255820 | 0.371834/0.295091 | 0.918720/0.595867 |
 | `gaussian_noise_scale=1` | 0.041600/0.199673 | 0.330529/0.270724 | 0.979200/0.556862 |
-| `masking_proportion=0` | 0.178400/0.382849 | 0.628607/0.252375 | 0.434720/0.357741 |
+| `masking_proportion=0` | 0.178400/0.382849 | $\color{red}{\text{0.628607/0.252375}}$ | 0.434720/0.357741 |
 | `masking_proportion=0.1` | 0.148000/0.355100 | 0.575342/0.262559 | 0.530880/0.401226 |
-| `masking_proportion=0.3` | 0.036800/0.188270 | 0.401675/0.225902 | 0.808320/0.426852 |
-| `masking_proportion=0.5` | 0.000000/0.000000 | 0.171781/0.147089 | 1.256800/0.443844 |
-| `masking_proportion=0.7` | 0.000000/0.000000 | 0.093989/0.091291 | 1.525120/0.411389 |
+| `masking_proportion=0.3` | $\color{green}{\text{0.036800/0.188270}}$ | $\color{green}{\text{0.401675/0.225902}}$ | $\color{green}{\text{0.808320/0.426852}}$ |
+| `masking_proportion=0.5` | $\color{green}{\text{0.000000/0.000000}}$ | $\color{green}{\text{0.171781/0.147089}}$ | $\color{green}{\text{1.256800/0.443844}}$ |
+| `masking_proportion=0.7` | 0.000000/0.000000 | $\color{red}{\text{0.093989/0.091291}}$ | 1.525120/0.411389 |
 | `guidance_scale=1` | 0.051200/0.220405 | 0.305049/0.285915 | 0.929920/0.533322 |
-| `guidance_scale=2` | 0.089600/0.285608 | 0.400578/0.307720 | 0.863520/0.584189 |
+| `guidance_scale=2` | 0.089600/0.285608 | $\color{red}{\text{0.400578/0.307720}}$ | 0.863520/0.584189 |
 | `guidance_scale=3` | 0.095200/0.293491 | 0.414672/0.299920 | 0.869120/0.595737 |
 | `guidance_scale=5` | 0.076800/0.266274 | 0.393659/0.298865 | 0.920800/0.612222 |
-| `guidance_scale=10` | 0.050400/0.218769 | 0.357435/0.274904 | 0.972480/0.593574 |
+| `guidance_scale=10` | 0.050400/0.218769 | $\color{red}{\text{0.357435/0.274904}}$ | 0.972480/0.593574 |
+
+## Evaluation Metrics
+
+Metrics are calculated by detecting the generated text with frozen OCR and then comparing to the true target string.
+
+**Exact Word Accuracy (ACC)**: <br/>
+$\text{ACC}(\%) = 100 \cdot \frac{\text{number of exact matches}}{N}.$
+
+**Normalized Edit Distance (NED)**: <br/>
+$\text{NED}_i = 1 - \frac{D(\hat{y}_i, y_i)}{\max(|\hat{y}_i|, |y_i|)}.$
+- $\hat{y}_i$: detected text by OCR
+- $y_i$: ground truth target text
+- $D(\hat{y}_i, y_i)$: minimum number of character insertions, deletions and substitutions needed to convert the OCR prediction into the target 
+
+**Character Error Rate (CER)**: <br/>
+$\text{CER} = \frac{\sum_i D(\hat{y}_i, y_i)}{\sum_i |y_i|}.$
 
 ## Key Observations
 
 - Out of three parameters, masking the glyph vectors had the most significant effect in degrading the performance
   - This was predictable since adding noise or adjusting guidance scale doesnt completely destroy the information whereas masking vectors does.
-  - Masking 70% of glyph vectors bring 85% decrease in NED while increasing glyph guidance x5 (2 to 10) only brings 11% decrease in NED
+  - Check red text in table: Masking 70% of glyph vectors bring 85% decrease in NED while increasing glyph guidance x5 (2 to 10) only brings 11% decrease in NED
 - TextCtrl tolerates moderate Gaussian corruption. Results remain nearly unchanged through noise scales 0-0.3 which suggests the glyph representation has some local robustness.
-- Performance collapses between 30% and 50% masking. Once half the glyph embedding is masked, none of the 50 outputs are exactly correct under any averaged condition.
+- Check green text in table: Performance collapses between 30% and 50% masking. Once half the glyph embedding is masked, none of the 50 outputs are exactly correct under any averaged condition.
 - Increasing glyph guidance doesn't always bring performance improvement. Default guidance scale for TextCtrl is 2 but 3 seems to perform slightly better.
 
 ## Visualization
