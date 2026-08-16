@@ -106,16 +106,16 @@ Second row will show the edited image with each combinations. Above each images 
 | `gaussian_noise_scale=0.3` | 0.083200/0.276184 | 0.387543/0.301668 | 0.892640/0.594018 |
 | `gaussian_noise_scale=0.5` | 0.070400/0.255820 | 0.371834/0.295091 | 0.918720/0.595867 |
 | `gaussian_noise_scale=1` | 0.041600/0.199673 | 0.330529/0.270724 | 0.979200/0.556862 |
-| `masking_proportion=0` | 0.178400/0.382849 | $\color{red}{\text{0.628607/0.252375}}$ | 0.434720/0.357741 |
+| `masking_proportion=0` | 0.178400/0.382849 | <font color="red">0.628607/0.252375</font> | 0.434720/0.357741 |
 | `masking_proportion=0.1` | 0.148000/0.355100 | 0.575342/0.262559 | 0.530880/0.401226 |
-| `masking_proportion=0.3` | $\color{green}{\text{0.036800/0.188270}}$ | $\color{green}{\text{0.401675/0.225902}}$ | $\color{green}{\text{0.808320/0.426852}}$ |
-| `masking_proportion=0.5` | $\color{green}{\text{0.000000/0.000000}}$ | $\color{green}{\text{0.171781/0.147089}}$ | $\color{green}{\text{1.256800/0.443844}}$ |
-| `masking_proportion=0.7` | 0.000000/0.000000 | $\color{red}{\text{0.093989/0.091291}}$ | 1.525120/0.411389 |
+| `masking_proportion=0.3` | <font color="green">0.036800/0.188270</font> | <font color="green">0.401675/0.225902</font> | <font color="green">0.808320/0.426852</font> |
+| `masking_proportion=0.5` | <font color="green">0.000000/0.000000</font> | <font color="green">0.171781/0.147089</font> | <font color="green">1.256800/0.443844</font> |
+| `masking_proportion=0.7` | 0.000000/0.000000 | <font color="red">0.093989/0.091291</font> | 1.525120/0.411389 |
 | `guidance_scale=1` | 0.051200/0.220405 | 0.305049/0.285915 | 0.929920/0.533322 |
-| `guidance_scale=2` | 0.089600/0.285608 | $\color{red}{\text{0.400578/0.307720}}$ | 0.863520/0.584189 |
+| `guidance_scale=2` | 0.089600/0.285608 | <font color="red">0.400578/0.307720</font> | 0.863520/0.584189 |
 | `guidance_scale=3` | 0.095200/0.293491 | 0.414672/0.299920 | 0.869120/0.595737 |
 | `guidance_scale=5` | 0.076800/0.266274 | 0.393659/0.298865 | 0.920800/0.612222 |
-| `guidance_scale=10` | 0.050400/0.218769 | $\color{red}{\text{0.357435/0.274904}}$ | 0.972480/0.593574 |
+| `guidance_scale=10` | 0.050400/0.218769 | <font color="red">0.357435/0.274904</font> | 0.972480/0.593574 |
 
 ## Evaluation Metrics
 
