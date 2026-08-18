@@ -8,13 +8,12 @@ Diffusion models generate better looking images but often have spelling errors a
 Components: SD1.5 VAE, SD1.5UNet, glyph structure encoder, text style encoder, a pretrained text-recognition vision encoder
 
 Workflow
-- Target string → char level text encoder → glyph feature structures: cglyph
-- Source text crop → style encoder → style features: cstyle
+- Target string → char level text encoder → glyph feature structures: $c_{glyph}$
+- Source text crop → style encoder → style features: $c_{style}$
 Both conditions are fed into UNet
 TextCtrl does not require rendering a standard-font glyph image every time at inference 
 
 Instead, it trains a character-level text encoder so that the text embedding becomes aligned with visual character structure
-
 
 ## Glyph Guidance
 
@@ -22,8 +21,91 @@ The authors describe the desired representation as being related to the cluster 
 - Paper uses 730 fonts of text images to generate vOPEN(k)
 - Glyph encoder with font variance performed better than wo font variance or CLIP
 
+$g_{OPEN} \approx v_{OPEN}^{(1)} \approx v_{OPEN}^{(2)} \approx \dots$
+- $g_{OPEN}$: produced by character level text encoder
+- $v_{OPEN}^{(1)}$: produced by frozen scene-text-recognition vision encoder, font 1
+- $v_{OPEN}^{(2)}$: produced by frozen scene-text-recognition vision encoder, font 2
+
+### Glyph Encoder
+
+TextCtrl trains the glyph encoder with a CLIP-style contrastive objective that aligns character-level text embeddings with visual text features extracted by a frozen OCR/scene-text recognizer.
+
+For text 'OPEN, the training pipeline is roughly: "OPEN" → glyph encoder → $C_struct$
+
+and separately: "OPEN" → render with random font → ViTSTR OCR encoder → $C_visual$
+
+Then the two are projected into a common space and trained contrastively.
+
+1. Generate synthetic text images
+  - create text strings and renders them using fonts from a font directory
+  - The glyph pretraining config uses strings up to length 24 and generates 100,000 samples
+2. Encode the string with the glyph encoder
+  - The input string is first converted character-by-character to integer IDs.
+  - The code pads all strings to L=24
+  - Those IDs are passed through a character embedding: $X_0 = E_{\mathrm{char}}(s) \in \mathbb{R}^{24 \times 768}.$
+  - Then positional encoding is added: $X_1 = X_0 + P$
+  - Then a 12-layer Transformer encoder processes the sequence: $C_{\mathrm{struct}} = \mathcal{T}(X_1)$
+  - released config is $L=24, d=768$, 12 Transformation layers, 8 attention heads
+3. Encode the rendered word with a frozen OCR vision encoder
+$I_i \xrightarrow{\text{ViTSTR}} V_i.$
+  - The rendered image is fed into a pretrained ViTSTR scene-text recognition model
+  - Because it is a ViT with 224×224 input and 16×16 patches, the visual output contains 197 tokens: $V_i \in \mathbb{R}^{197 \times 768}$
+    - 196 patch tokens+1 CLS token.
+  - ViSTR is frozen; the OCR model acts as the teacher visual space.
+4. Project both sides into a common 1024-D space
+  - Glyph representation: $[B,24,768] \rightarrow [B,1024]$
+  - Visual side: $[B,197,768] \rightarrow [B,1024]$
+5. L2 normalize the representations
+  - normalize both projected vectors <br/>
+  $\hat{t}_i = \frac{t_i}{\|t_i\|_2}, \qquad \hat{v}_i = \frac{v_i}{\|v_i\|_2}.$
+  - therefore their dot product is cosine similarity $\hat{v}_i^\top \hat{t}_j = \cos(v_i, t_j)$
+6. Compute CLIP-style similarity across the batch
+  - For a batch of B examples, they compute all pairwise similarities: $S_{ij} = \tau \hat{v}_i^\top \hat{t}_j$ <br/>
+  where $\tau = \exp(\text{logit\_scale})$ is a learnable temperature parameter 
+7. Symmetric contrastive loss
+  - The correct text for image i is the text at the same batch index: $y_i=i$
+  - They compute cross-entropy in both directions.
+    - image to text: $\mathcal{L}_{v \rightarrow t} = \mathrm{CE}(S, y)$
+    - text to image: $\mathcal{L}_{t \rightarrow v} = \mathrm{CE}(S^\top, y)$
+    - then: $\mathcal{L}_{\mathrm{glyph}} = \frac{1}{2} \left( \mathcal{L}_{v \rightarrow t} + \mathcal{L}_{t \rightarrow v} \right)$
+    
+The frozen OCR model is the teacher:
+The trainable components include the glyph encoder, character embeddings, projection heads, and the contrastive temperature.
+
+
+**Glyph encoder output**:
+
+$C_{\mathrm{struct}} \in \mathbb{R}^{L \times d}$
+- L: character-sequence length; $L=24$
+- d: embedding dimension; $d=768$
 
 ## Style Guidance
+
+### Text style encoder: extracts style from source text image
+- The style encoder uses a ViT backbone and produces features that are projected into approximately two categories: texture and spatial features
+  - Texture features are used for text color transfer and font transfer
+  - Spatial features are used for text removal, text segmentation
+- This is intended to make the encoder explicitly learn different aspects of text appearance rather than relying on an unconstrained latent feature.
+- Text color transfer
+  - The network receives a black-and-white text glyph and style information from the source image. It must reconstruct the source color appearance
+  - An Adaptive Instance Normalization module is used to inject color/style statistics.
+- Text font transfer
+  - The network receives text rendered in a template font and transforms its boundary into the source font. This task forces the style representation to preserve font shape characteristics.
+  - A lightweight encoder-decoder with pyramid pooling performs this boundary transformation.
+- Text removal: The model must remove text from the source crop and restore the hidden background.
+- Text segmentation: The model predicts a binary text mask. This teaches explicit spatial separation between text and background.
+
+The style encoder is trained using a combination of losses:
+- MSE for color transfer,
+- MAE for font transfer,
+- Dice-based losses for text removal and segmentation
+Synthetic data provides ground truth for all four subtasks. 
+
+**Glyph encoder output**: <br/>
+$x_{spatial}, x_{glyph}$ with both having shape [B, 64, 768]
+- The source image is resized into 128×128 and split into 16×16 patches
+
+
 
 ## How style and glyph guidance enter UNet
 - Glyph guidance through cross attention: glyph feature provides keys and values in cross-attention. The latent U-Net features query the glyph representation to determine which characters should appear.
@@ -33,7 +115,6 @@ Overall training loss
 - denoising loss
 - construction loss: includes pixel-level MSE, perceptual loss using VGG-19 features, style loss using Gram matrices
 - linguistic loss: A pretrained text recognizer reads the generated image. The OCR prediction is compared with the target character sequence to penalize spelling mistakes.
-
 
 ## SD3.5 Application
 
