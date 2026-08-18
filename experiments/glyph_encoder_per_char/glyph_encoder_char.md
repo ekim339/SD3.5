@@ -127,4 +127,4 @@ Check ![summary.csv](../glyph_encoder_per_char/results/summary.csv)
 
 First row shows the original image + noise. Second row and below shows each masking proportions. Each column shows masking each characters.
 
-![](../glyph_encoder_per_char/results/collages/sample_0000_grid.png)
+![](../glyph_encoder_per_char/results/collages/sample_0001_grid.png)
