@@ -89,7 +89,7 @@ $\text{CER} = \frac{\sum_i D(\hat{y}_i, y_i)}{\sum_i |y_i|}.$
 
 ## Key Observations
 
-check ![](../glyph_encoder_per_char/results/collages/sample_0000_grid.png)
+Check ![summary.csv](../glyph_encoder_per_char/results/summary.csv)
 
 | masking_proportion | ACC_mean/std | NED_mean/std | CER_mean/std | masked_character_accuracy_mean/std | other_character_1_accuracy_mean/std | other_character_2_accuracy_mean/std | other_character_3_accuracy_mean/std | other_character_4_accuracy_mean/std | masked_character_index |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
