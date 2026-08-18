@@ -37,7 +37,7 @@ experiments/glyph_encoder/results/*
 !experiments/glyph_encoder/results/inputs/0002_05542.png
 !experiments/glyph_encoder/results/inputs/0003_30959.png
 !experiments/glyph_encoder/results/inputs/0004_37280.png
-experiments/glyph_encoder_per_char/*
+experiments/glyph_encoder_per_char/
 !experiments/glyph_encoder_per_char/glyph_encoder_per_char.md
 experiments/glyph_encoder_per_char/results/generated
 experiments/glyph_encoder_per_char/results/inputs
