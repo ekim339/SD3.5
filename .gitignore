@@ -42,6 +42,8 @@ experiments/glyph_encoder_per_char/results/inputs/
 experiments/glyph_encoder_per_char/results/predictions.jsonl
 experiments/glyph_encoder_per_char/results/generated
 experiments/glyph_encoder_per_char/results/inputs
+!experiments/glyph_encoder_per_char/results/summary.csv
+!experiments/glyph_encoder_per_char/results/collages/sample_0000_grid.png
 
 /results/
 datasets/
