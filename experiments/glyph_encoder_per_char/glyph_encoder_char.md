@@ -121,7 +121,8 @@ Check ![summary.csv](../glyph_encoder_per_char/results/summary.csv)
 
 - Accuracy for the first character of the target text is higher than other characters
   - Sometimes accuracy of the first character is higher than other characters despite being masked (upto masking proportion ~0.3)
-- Masking one character does not significantly affect the accuracy of other characters (or even slighly increased the accuracys)
+- From roughly inspecting the metrics, masking one character does not significantly affect the accuracy of other characters (or even slighly increased the accuracys)
+  - However, when I visually check the generated images, I can see that other character are being affected when you mask one character.
 
 ## Visualization
 
