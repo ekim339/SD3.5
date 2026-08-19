@@ -82,18 +82,38 @@ $C_{\mathrm{struct}} \in \mathbb{R}^{L \times d}$
 ## Style Guidance
 
 ### Text style encoder: extracts style from source text image
-- The style encoder uses a ViT backbone and produces features that are projected into approximately two categories: texture and spatial features
-  - Texture features are used for text color transfer and font transfer
+- Original input image is 128\*128 with 16\*16 patches
+  - Therefore 8*8=64 patches are produced
+  - The $x_{\mathrm{feature}} \in \mathbb{R}^{B \times 64 \times 768}$ representation splits to $x{spatial}$ and $x_{glyph}$ through separate Transformer attention blocks
+- The style encoder uses a ViT backbone and produces features that are projected into approximately two categories: glyph and spatial features
+  - Glyph features are used for text color transfer and font transfer
   - Spatial features are used for text removal, text segmentation
 - This is intended to make the encoder explicitly learn different aspects of text appearance rather than relying on an unconstrained latent feature.
-- Text color transfer
-  - The network receives a black-and-white text glyph and style information from the source image. It must reconstruct the source color appearance
-  - An Adaptive Instance Normalization module is used to inject color/style statistics.
-- Text font transfer
-  - The network receives text rendered in a template font and transforms its boundary into the source font. This task forces the style representation to preserve font shape characteristics.
+
+- [Glyph/style branch] Text color transfer
+  - The network receives a black-and-white text glyph and style information from the source image. - It must reconstruct the source color appearance: $x_{glyph}, c_t \rightarrow c_r$
+  - Code uses a pretrained-style ResNet feature extractor plus AdaIN (Adaptive Instance Normalization module) to inject color/style statistics.
+  - Training loss is MSE: <br/>
+  $\mathcal{L}_{\mathrm{color}} = \|\hat{c}_r - c_r\|_2^2$
+- [Glyph/style branch] Text font transfer
+  - Dataset renders the target text with 1. fixed standard font ($f_t$) 2. target font ($f_r$)
+  - The network receives text rendered in a template font and transforms its boundary into the source font: $x_{glyph}, f_t \rightarrow f_r$
+  - This task forces the style representation to preserve font shape characteristics.
+  - Font output supervised by Dice Loss
   - A lightweight encoder-decoder with pyramid pooling performs this boundary transformation.
-- Text removal: The model must remove text from the source crop and restore the hidden background.
-- Text segmentation: The model predicts a binary text mask. This teaches explicit spatial separation between text and background.
+- [Spatial branch] Text removal: The model must remove text from the source crop and restore the hidden background.
+  - "Can $x_{spatial}$ tell us enough about the source image to remove the existing text?"
+  - Spatial head predicts $\hat{I_{bg}}$; background image
+  - Weighted L1 loss: <br/>
+  $\mathcal{L}_{\mathrm{removal}} = 2 \left\| \hat{I}_{\mathrm{bg}} \odot M - I_{\mathrm{bg}} \odot M \right\|_1 + 0.5 \left\| \hat{I}_{\mathrm{bg}} \odot (1 - M) - I_{\mathrm{bg}} \odot (1 - M) \right\|_1$
+- [Spatial branch] Text segmentation: The model predicts a binary text mask. This teaches explicit spatial separation between text and background.
+  - "Where is the text"
+  - Dice Loss: <br/>
+  $\mathcal{L}_{\mathrm{seg}} = 1 - \frac{2 \sum \hat{M} M + \epsilon}{\sum \hat{M} + \sum M + \epsilon}$
+
+During training of style encoder, there are two branches
+$x_{spatial}, x_{glyph}$ with both having shape [B, 64, 768]
+- The source image is resized into 128×128 and split into 16×16 patches
 
 The style encoder is trained using a combination of losses:
 - MSE for color transfer,
@@ -102,10 +122,18 @@ The style encoder is trained using a combination of losses:
 Synthetic data provides ground truth for all four subtasks. 
 
 **Glyph encoder output**: <br/>
-$x_{spatial}, x_{glyph}$ with both having shape [B, 64, 768]
-- The source image is resized into 128×128 and split into 16×16 patches
 
+The source image is $I_s \in \mathbb{R}^{B \times 3 \times 256 \times 256}$
 
+There are 256/16=16 patches per spatial dimension therefore 16*16=256 tokens
+
+After ViT, [B,3,256,256] → [B,768,16,16] → [B,256,768]
+
+$H_{style} \in [B,256,768]$ is the raw style ViT feature sequence in the final TextCtrl architecture.
+
+Then the code immediately reshapes to [B,256,768] → [B,768,16,16]
+
+StylePyramidNet then applies adaptive pooling to create 32*32, 16*16, 8*8, 4*4 style/control feature maps, which are projected with zero-initialized convolutions and supplied to different U-Net stages.
 
 ## How style and glyph guidance enter UNet
 - Glyph guidance through cross attention: glyph feature provides keys and values in cross-attention. The latent U-Net features query the glyph representation to determine which characters should appear.

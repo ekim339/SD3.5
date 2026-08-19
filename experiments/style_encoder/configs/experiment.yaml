@@ -1,0 +1,35 @@
+seed: 42
+sample_seed: 1001
+target_seed: 2002
+sample_count: 50
+target_alphabet: abcdefghijklmnopqrstuvwxyz0123456789
+masking_proportions: [0, 0.1, 0.3, 0.5, 0.7]
+output_dir: experiments/style_encoder/results
+stage: all
+overwrite: false
+dataset:
+  roots: [datasets/SRNet_Datagen/train/train-50k-1, datasets/SRNet_Datagen/train/train-50k-2, datasets/SRNet_Datagen/train/train-50k-3, datasets/SRNet_Datagen/train/train-50k-4]
+  source_dir: i_s
+  source_labels: i_s.txt
+input_noise:
+  seed: 3003
+  minimum_standard_deviation: 2.0
+  maximum_standard_deviation: 12.0
+textctrl:
+  python_executable: ${oc.env:TEXTCTRL_PYTHON,/home/ekim339/miniconda3/envs/textctrl/bin/python}
+  repository_dir: networks/external/TextCtrl
+  checkpoint_path: networks/external/TextCtrl/weights/model.pth
+  starting_layer: 10
+  num_inference_steps: 50
+  guidance_scale: 2.0
+ocr:
+  checkpoint_path: networks/external/TextCtrl/weights/ocr_model.pth
+metrics:
+  case_sensitive: false
+collage:
+  proportion_sample_indices: [0, 1, 2, 3, 4, 5, 6]
+  patch_sample_indices: [0, 1, 2]
+  cell_width: 280
+  image_height: 180
+  caption_height: 78
+  font_path: /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
