@@ -103,7 +103,7 @@ $\text{CER} = \frac{\sum_i D(\hat{y}_i, y_i)}{\sum_i |y_i|}.$
 
 more style encoder masking → less source-glyph leakage → less conflict → better target-text reconstruction.
 
-**Hypothesis 2: Replaing the style encoder with a residual extractor between a source image and rendered glyph image of the standard style may improve the performance of textCtrl.**
+**Hypothesis 2: Replacing the style encoder with a residual extractor between source image and rendered glyph image of standard style may improve the performance of textCtrl.**
 - The residual extractor extracts residual between the original source image and rendered glyph image of the same source text (standard style)
 - Theoretically this residual attempts to exclude the glyph information of the source text and only extract the style information.
 - The residual extractor is trained using same style text pairs:
@@ -120,7 +120,7 @@ Each row indicates different proportions of masking the style encoder features. 
 
 
 Two images at the top each shows the source image + noise and edited image without any masking. 4*4 grid of images below shows the result of masking the corresponding patches of style features. e.g. Image in the grid [0,0] is the result of completely masking the [0,0] grid/region of the style features. 
-- For this particular sample, masking the leftmost regions (column 1) brings improvement in target text accuracy.
+- For this particular sample, masking the leftmost regions (column 1) brings improvement in target text
 
 \* There are 16*16 patches for style features and I divided this into 4\*4 smaller regions. 
 
