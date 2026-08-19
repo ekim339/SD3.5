@@ -113,11 +113,14 @@ more style encoder masking → less source-glyph leakage → less conflict → b
 
 ## Visualization
 
+### Collage 1
+
 Each row indicates different proportions of masking the style encoder features. Each column represents different samples.
 - See column 1 (leftmost). Text immeditely improves as you go from no masking to 10% masking. (second row to third row) NED increased from 0.286 to 0.8.
 
 ![](../style_encoder/results/collages/masking_proportions_6x7.png)
 
+### Collage 2
 
 Two images at the top each shows the source image + noise and edited image without any masking. 4*4 grid of images below shows the result of masking the corresponding patches of style features. e.g. Image in the grid [0,0] is the result of completely masking the [0,0] grid/region of the style features. 
 - For this particular sample, masking the leftmost regions (column 1) brings improvement in target text
