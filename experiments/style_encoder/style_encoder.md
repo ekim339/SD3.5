@@ -10,7 +10,7 @@ Next, randomly sample combinations of 5 characters for each images. These string
 
 You will complete the following two experiments.
 
-## 1. Masking proportions.
+## 1. Masking proportions
 
 From the source image, extract the style features from style encoder. The size of the feature would be [B, 256, 768]. Before feeding this style features into SD1.5, randomly mask the tokens of following proportions.
 
@@ -18,7 +18,7 @@ From the source image, extract the style features from style encoder. The size o
 - 0.1: randomly mask 10% of 256 tokens
 - 0.3: randomly mask 30% of 256 tokens
 
-## 2. Token Masking
+## 2. Regional Masking of Patches
 
 From the source image, extract the style features from style encoder. The size of the feature would be [B, 256, 768]. Before feeding this style features into SD1.5, mask 16 tokens at once. 256 tokens refer to 16\*16 image patches. I want to mask each of the smaller square of size 4\*4 within this 16\*16 patches
 - square [0,0] corresponds to row 0-3 and col 0-3: tokens [0, 1, 2, 3, 16, 17, 18, 19, 32, 33, 34, 35, 48, 49, 50, 21]
