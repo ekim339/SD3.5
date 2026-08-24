@@ -46,6 +46,37 @@ def _validate(config: Mapping[str, Any]) -> None:
         raise UnifiedConfigError("model.checkpoint must be set")
     if mode == "inference" and not resolve_path(checkpoint).is_file():
         raise UnifiedConfigError(f"Model checkpoint does not exist: {resolve_path(checkpoint)}")
+    if backend == "textctrl_subprocess":
+        style = config.get("textctrl_style", {})
+        style_encoder = str(style.get("encoder", "textctrl"))
+        if style_encoder not in {"textctrl", "residual"}:
+            raise UnifiedConfigError(
+                "textctrl_style.encoder must be either 'textctrl' or 'residual'"
+            )
+        if style_encoder == "residual":
+            if mode != "inference":
+                raise UnifiedConfigError(
+                    "Residual TextCtrl style conditioning currently supports inference only"
+                )
+            required = {
+                "residual checkpoint": style.get("residual_checkpoint", ""),
+                "channel-adapter checkpoint": style.get("adapter_checkpoint", ""),
+                "canonical glyph font": style.get("canonical_font", ""),
+            }
+            missing = [
+                f"{name}: {resolve_path(str(value))}"
+                for name, value in required.items()
+                if not str(value).strip() or not resolve_path(str(value)).is_file()
+            ]
+            if missing:
+                raise UnifiedConfigError(
+                    "Residual TextCtrl style conditioning is missing:\n  - "
+                    + "\n  - ".join(missing)
+                )
+            if int(style.get("resolution", 0)) != 256:
+                raise UnifiedConfigError(
+                    "textctrl_style.resolution must be 256 for the trained residual extractor"
+                )
 
 
 def _effective_diffusion(config: Mapping[str, Any]) -> dict[str, Any]:
@@ -73,6 +104,7 @@ def _runtime_config(config: Mapping[str, Any]) -> dict[str, Any]:
         "network": network,
         "diffusion": _effective_diffusion(config),
         "conditioning": dict(network.get("conditioning", {})),
+        "textctrl_style": dict(config.get("textctrl_style", {})),
         "task": {
             "name": "text_image_editing",
             "dataset": dict(config["dataset"]),

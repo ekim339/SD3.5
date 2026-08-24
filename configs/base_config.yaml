@@ -20,6 +20,15 @@ model:
   # Used as the adapter checkpoint for sd3.5 and the model checkpoint for TextCtrl.
   checkpoint: checkpoints/sd35_scene_text_sd3_inpaint_dual_prompt_style_pad_200k/adapters-015000.pt
 
+# Used only with network=textctrl. Choose the released style ViT or the frozen
+# custom residual extractor followed by its trained channel adapter.
+textctrl_style:
+  encoder: textctrl
+  residual_checkpoint: encoders/checkpoints/residual_style/residual-style-100000.pt
+  adapter_checkpoint: adapter/checkpoints/channel-adapter-latest.pt
+  canonical_font: /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+  resolution: 256
+
 output_dir: results/${network.name}/${mode}/${now:%Y-%m-%d_%H-%M-%S}
 
 prompt:

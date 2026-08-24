@@ -1,0 +1,47 @@
+seed: 42
+device: auto
+
+residual_checkpoint: encoders/checkpoints/residual_style/residual-style-100000.pt
+textctrl_repository: networks/external/TextCtrl
+textctrl_style_checkpoint: networks/external/TextCtrl/weights/style_encoder.pth
+
+dataset:
+  roots:
+    - datasets/SRNet_Datagen/train/train-50k-1
+    - datasets/SRNet_Datagen/train/train-50k-2
+    - datasets/SRNet_Datagen/train/train-50k-3
+    - datasets/SRNet_Datagen/train/train-50k-4
+  canonical_font: /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+  resolution: 256
+  limit: null
+  validation_samples: 1000
+  split_seed: 5101
+
+model:
+  input_channels: 256
+  output_channels: 768
+
+loss:
+  mse_weight: 1.0
+  cosine_weight: 0.1
+
+training:
+  output_dir: adapter/checkpoints
+  batch_size: 8
+  num_workers: 8
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  max_steps: 20000
+  max_grad_norm: 1.0
+  precision: bfloat16
+  log_every: 20
+  validate_every: 500
+  save_every: 1000
+  resume_from: null
+
+hydra:
+  run:
+    dir: .
+  output_subdir: null
+  job:
+    chdir: false

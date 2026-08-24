@@ -131,7 +131,7 @@ After ViT, [B,3,256,256] → [B,768,16,16] → [B,256,768]
 
 $H_{style} \in [B,256,768]$ is the raw style ViT feature sequence in the final TextCtrl architecture.
 
-Then the code immediately reshapes to [B,256,768] → [B,768,16,16]
+Then the code immediately reshapes to [B,256,768] → [B,768,16,16]. TextCtrl sends style information into the U-Net as multi-scale spatial residual/control features, not as cross-attention K,V tokens. SD1.5 expects a conditioning tensor of shape [B, L, 768] only for its cross-attention encoder hidden states.
 
 StylePyramidNet then applies adaptive pooling to create 32*32, 16*16, 8*8, 4*4 style/control feature maps, which are projected with zero-initialized convolutions and supplied to different U-Net stages.
 

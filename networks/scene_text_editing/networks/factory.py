@@ -388,6 +388,20 @@ class TextCtrlSubprocessBackend:
                 "TextCtrl is missing required source/checkpoints/components:\n"
                 f"  - {formatted}\nRun the model downloader and verify its output."
             )
+        style = self.config.get("textctrl_style", {})
+        style_encoder = str(style.get("encoder", "textctrl"))
+        if style_encoder not in {"textctrl", "residual"}:
+            raise BackendError(
+                "textctrl_style.encoder must be either 'textctrl' or 'residual'."
+            )
+        if style_encoder == "residual":
+            for label, key in (("residual extractor", "residual_checkpoint"),
+                               ("channel adapter", "adapter_checkpoint"),
+                               ("canonical font", "canonical_font")):
+                value = str(style.get(key, "")).strip()
+                path = resolve_path(value) if value else Path("<unset>")
+                if not value or not path.is_file():
+                    raise BackendError(f"Missing TextCtrl {label}: {path}")
         return repository, resolve_path(str(self.network["checkpoint_path"]))
 
     @staticmethod
@@ -459,10 +473,14 @@ class TextCtrlSubprocessBackend:
                 encoding="utf-8",
             )
 
-            worker = (
-                Path(__file__).resolve().parent.parent
-                / "textctrl_inference_worker.py"
+            style = self.config.get("textctrl_style", {})
+            style_encoder = str(style.get("encoder", "textctrl"))
+            worker_name = (
+                "textctrl_residual_inference_worker.py"
+                if style_encoder == "residual"
+                else "textctrl_inference_worker.py"
             )
+            worker = Path(__file__).resolve().parent.parent / worker_name
             command = [
                 str(self.network.get("python_executable", "python3")),
                 str(worker),
@@ -483,12 +501,26 @@ class TextCtrlSubprocessBackend:
                 "--guidance-scale",
                 str(float(self.diffusion["guidance_scale"])),
             ]
+            if style_encoder == "residual":
+                command.extend([
+                    "--residual-checkpoint",
+                    str(resolve_path(str(style["residual_checkpoint"]))),
+                    "--adapter-checkpoint",
+                    str(resolve_path(str(style["adapter_checkpoint"]))),
+                    "--canonical-font",
+                    str(resolve_path(str(style["canonical_font"]))),
+                    "--residual-resolution",
+                    str(int(style.get("resolution", 256))),
+                ])
             environment = os.environ.copy()
             existing_pythonpath = environment.get("PYTHONPATH")
+            project_root = Path(__file__).resolve().parents[3]
             environment["PYTHONPATH"] = (
-                str(repository)
+                os.pathsep.join((str(project_root), str(repository)))
                 if not existing_pythonpath
-                else os.pathsep.join((str(repository), existing_pythonpath))
+                else os.pathsep.join(
+                    (str(project_root), str(repository), existing_pythonpath)
+                )
             )
             try:
                 subprocess.run(
@@ -518,6 +550,7 @@ class TextCtrlSubprocessBackend:
                         "target_text": str(sample.target_text),
                         "output_path": str(destination),
                         "seed": int(self.config.get("seed", 42)),
+                        "style_encoder": style_encoder,
                         "status": "generated",
                     }
                 )

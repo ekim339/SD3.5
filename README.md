@@ -43,6 +43,21 @@ python run.py network=textctrl \
   model.checkpoint=networks/external/TextCtrl/weights/model.pth
 ```
 
+TextCtrl uses its released ViT style encoder by default. To replace only that
+style encoder during inference with the frozen residual extractor and trained
+channel adapter configured in `base_config.yaml`, add:
+
+```bash
+python run.py network=textctrl \
+  model.checkpoint=networks/external/TextCtrl/weights/model.pth \
+  textctrl_style.encoder=residual
+```
+
+Set `textctrl_style.encoder=textctrl` to use the original released pipeline.
+Residual conditioning renders the source string with the same Pillow renderer,
+canonical font, resolution, and normalization used to train the residual
+extractor. It is currently an inference-only option.
+
 Fine-tune SD3.5 on the configured SRNet partitions:
 
 ```bash
