@@ -55,4 +55,5 @@ checkpoints/
 legacy/classifier_runs/
 networks/external/TextCtrl/weights/
 networks/external/TextCtrl/.git/
+networks/TextCtrl/
 encoders/

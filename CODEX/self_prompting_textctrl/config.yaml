@@ -1,0 +1,35 @@
+model:
+  vae_path: ../../networks/TextCtrl/weights/sd/vae
+  unet_path: ../../networks/TextCtrl/weights/sd/unet
+  scheduler_path: ../../networks/TextCtrl/weights/sd/scheduler
+  # May be a Hub repository or local SD1.5 directory with tokenizer/ and text_encoder/.
+  text_model_path: stable-diffusion-v1-5/stable-diffusion-v1-5
+  revision: null
+  image_size: 256
+  max_text_length: 77
+  conditioning_dropout: 0.1
+
+data:
+  root: ../../datasets/SRNet_Datagen/train
+  font_path: ../../datasets/SRNet_Datagen/resources/generator/fonts/arial.ttf
+  splits: [train-50k-1, train-50k-2, train-50k-3, train-50k-4]
+  num_samples: 200000
+  num_workers: 8
+
+training:
+  output_dir: outputs
+  seed: 42
+  batch_size: 4
+  gradient_accumulation_steps: 8
+  learning_rate: 1.0e-5
+  weight_decay: 0.01
+  max_steps: 10000
+  mixed_precision: fp16
+  gradient_checkpointing: true
+  max_grad_norm: 1.0
+  checkpoint_every: 1000
+  log_every: 20
+
+inference:
+  num_inference_steps: 50
+  guidance_scale: 5.0
