@@ -57,3 +57,5 @@ networks/external/TextCtrl/weights/
 networks/external/TextCtrl/.git/
 networks/TextCtrl/
 encoders/
+
+CODEX/self_prompting_textctrl/outputs/

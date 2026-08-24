@@ -5,7 +5,7 @@ from pathlib import Path
 
 import torch
 from accelerate import Accelerator
-from accelerate.utils import set_seed
+from accelerate.utils import DistributedDataParallelKwargs, set_seed
 from diffusers.optimization import get_scheduler
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
@@ -56,9 +56,11 @@ def main() -> None:
     model_config = config["model"]
     data_config = config["data"]
     train_config = config["training"]
+    ddp_kwargs = DistributedDataParallelKwargs(gradient_as_bucket_view=True)
     accelerator = Accelerator(
         gradient_accumulation_steps=train_config["gradient_accumulation_steps"],
         mixed_precision=train_config["mixed_precision"],
+        kwargs_handlers=[ddp_kwargs],
     )
     set_seed(train_config["seed"])
     dataset = SRNetSelfPromptDataset(
@@ -139,6 +141,7 @@ def main() -> None:
                     break
     save_checkpoint(accelerator, model, optimizer, lr_scheduler, output_dir, global_step)
     progress.close()
+    accelerator.end_training()
 
 
 if __name__ == "__main__":

@@ -14,16 +14,16 @@ data:
   font_path: ../../datasets/SRNet_Datagen/resources/generator/fonts/arial.ttf
   splits: [train-50k-1, train-50k-2, train-50k-3, train-50k-4]
   num_samples: 200000
-  num_workers: 8
+  num_workers: 4
 
 training:
   output_dir: outputs
   seed: 42
-  batch_size: 4
-  gradient_accumulation_steps: 8
+  batch_size: 1
+  gradient_accumulation_steps: 16
   learning_rate: 1.0e-5
   weight_decay: 0.01
-  max_steps: 10000
+  max_steps: 30000
   mixed_precision: fp16
   gradient_checkpointing: true
   max_grad_norm: 1.0

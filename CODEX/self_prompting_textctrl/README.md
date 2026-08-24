@@ -17,6 +17,12 @@ The existing `sd3` environment contains the runtime packages. Initial model cons
 From this directory:
 
 ```bash
+./train_2gpu.sh
+```
+
+For a custom Accelerate launch:
+
+```bash
 conda run -n sd3 accelerate launch train.py --config config.yaml
 ```
 
