@@ -1,64 +1,35 @@
-# Self-prompting SD3.5 scene-text editing
+# Self-prompting SD3.5
 
-This package trains a parameter-efficient SD3.5 adaptation over the four local
-SRNet-Datagen 50k shards (200k examples). For each example it constructs the
-masked source, a tight style crop padded back to 512x512, and a single-line
-Pillow glyph map. The frozen SD3.5 VAE encodes each image independently.
+This directory implements the supplied specification as a self-reconstruction
+training task. Every SRNet source image `i_s` is masked with `mask_s`; its own
+text from `i_s.txt` is rendered as the glyph prompt and its masked-region crop
+is the style prompt. The reconstruction target is the unchanged source image.
+At inference, only the rendered/text-encoder string changes.
 
-The MM-DiT input is `[z_t, z_masked, z_glyph, z_style, mask]`: 65 channels for
-the standard 16-channel SD3.5 latent. The pretrained 16-channel patch projection
-is copied into the expanded projection and the 49 added channels start at zero.
+The frozen SD3.5 VAE separately encodes the masked image, glyph, and style
+images. These three 16-channel latents are concatenated with the noisy
+16-channel target and one mask channel. The resulting 65-channel tensor enters
+the MM-DiT. The base transformer, VAE, CLIP-L, OpenCLIP bigG, and T5 remain
+frozen. PEFT LoRA parameters are trained on the expanded input convolution and
+joint-attention projections.
 
-The SD3.5 transformer, VAE, and all three text encoders remain frozen. PEFT LoRA
-adapters are trained on the expanded input projection and SD3 joint-attention
-projections. Including `pos_embed.proj` is essential: its convolutional LoRA
-provides the only trainable path from the masked-image, glyph, style, and mask
-channels into the frozen backbone. Rank, alpha, dropout, and target modules are
-configured under `model.lora` in `config.yaml`.
-
-Install and launch from the repository root:
+Install and train from the repository root:
 
 ```bash
 python -m pip install -r CODEX/self_prompting_sd35/requirements.txt
-
-NCCL_P2P_DISABLE=1 accelerate launch \
-  --multi_gpu --num_processes 2 --mixed_precision bf16 \
-  -m CODEX.self_prompting_sd35.train \
+accelerate launch -m CODEX.self_prompting_sd35.train \
   --config CODEX/self_prompting_sd35/config.yaml
 ```
 
-`NCCL_P2P_DISABLE=1` is required on `mmplab2`, where direct NCCL P2P between
-the two RTX A4500 GPUs hangs; it makes NCCL use shared-memory transport. It may
-be omitted on hosts whose P2P collective test succeeds.
-
-Accept the gated Stability AI model license and authenticate with Hugging Face
-before training. LoRA removes full-transformer gradients and optimizer states,
-but each worker still loads the frozen SD3.5 pipeline, so BF16 and gradient
-checkpointing remain enabled.
-
-## Checkpoints
-
-Periodic `checkpoint-NNNNNN` directories contain:
-
-- `pytorch_lora_weights.safetensors`: only the transformer LoRA tensors
-- Accelerate optimizer, scaler, and RNG state needed to resume
-
-The output directory itself receives the final
-`pytorch_lora_weights.safetensors`. Frozen SD3.5 transformer or encoder
-weights are never duplicated in these checkpoints.
-
-Resume with:
+Edit a marked region after training:
 
 ```bash
-NCCL_P2P_DISABLE=1 accelerate launch \
-  --multi_gpu --num_processes 2 --mixed_precision bf16 \
-  -m CODEX.self_prompting_sd35.train \
-  --config CODEX/self_prompting_sd35/config.yaml \
-  --resume CODEX/self_prompting_sd35/checkpoints/checkpoint-002500
+python -m CODEX.self_prompting_sd35.inference \
+  --image source.png --mask mask.png --text "replacement" \
+  --lora CODEX/self_prompting_sd35/checkpoints/lora-final \
+  --output edited.png
 ```
 
-Loading this adapter requires constructing `SelfPromptingSD35` first so its
-patch projection is expanded from 16 to 65 channels, then calling
-`model.load_lora_weights(path)`. A stock 16-channel SD3.5 pipeline cannot load
-the input-projection LoRA directly because its tensor shape is intentionally
-different.
+The Markdown mentions `/home/ekim339/project/...`, but this checkout's dataset
+is under `/home/ekim339/projects/SD3.5/datasets/SRNet_Datagen`; the portable
+configuration therefore uses repository-relative paths to its four 50k shards.
