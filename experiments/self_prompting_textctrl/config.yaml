@@ -1,0 +1,69 @@
+seed: 42
+sample_seed: 1001
+target_seed: 2002
+generation_seed: 3003
+sample_count: 100
+# both, regular, or self_prompting
+mode: self_prompting
+stage: all  # prepare, regular, self_prompting, ocr, report, or all
+overwrite: false
+output_dir: experiments/self_prompting_textctrl/results/50K
+# To reuse exactly the same sampled/noisy inputs and target strings in a new
+# output directory, point this at a previous run's samples.jsonl. Leave null to
+# prepare/cache samples inside output_dir.
+samples_path: null
+
+dataset:
+  roots:
+    - datasets/SRNet_Datagen/train/train-50k-1
+    - datasets/SRNet_Datagen/train/train-50k-2
+    - datasets/SRNet_Datagen/train/train-50k-3
+    - datasets/SRNet_Datagen/train/train-50k-4
+  source_dir: i_s
+  mask_dir: mask_s
+  source_labels: i_s.txt
+
+input_noise:
+  seed: 4004
+  minimum_standard_deviation: 2.0
+  maximum_standard_deviation: 12.0
+
+targets:
+  letters: abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ
+  special_characters: ".!?,;:-_@#$%&*+="
+
+regular:
+  python_executable: ${oc.env:TEXTCTRL_PYTHON,/home/ekim339/miniconda3/envs/textctrl/bin/python}
+  repository_dir: networks/TextCtrl
+  checkpoint_path: networks/TextCtrl/weights/model.pth  # regular TextCtrl weights
+  starting_layer: 10
+  num_inference_steps: 50
+  guidance_scale: 2.0
+
+self_prompting:
+  python_executable: ${oc.env:SELF_PROMPTING_PYTHON,/home/ekim339/miniconda3/envs/ste/bin/python}
+  checkpoint_path: checkpoints/checkpoint-00050000  # replace for a new run
+  vae_path: networks/TextCtrl/weights/sd/vae
+  unet_path: networks/TextCtrl/weights/sd/unet
+  scheduler_path: networks/TextCtrl/weights/sd/scheduler
+  text_model_path: stable-diffusion-v1-5/stable-diffusion-v1-5
+  revision: null
+  font_path: /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+  image_size: 256
+  max_text_length: 77
+  num_inference_steps: 50
+  guidance_scale: 5.0
+
+ocr:
+  python_executable: ${regular.python_executable}
+  repository_dir: ${regular.repository_dir}
+  checkpoint_path: networks/TextCtrl/weights/ocr_model.pth
+
+metrics:
+  case_sensitive: true
+
+collage:
+  font_path: /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+  cell_width: 280
+  image_height: 220
+  caption_height: 72

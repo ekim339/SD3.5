@@ -117,9 +117,17 @@ $x_{spatial}, x_{glyph}$ with both having shape [B, 64, 768]
 
 The style encoder is trained using a combination of losses:
 - MSE for color transfer,
-- MAE for font transfer,
-- Dice-based losses for text removal and segmentation
+- MAE for text removal,
+- Dice-based losses for font transfer and segmentation
 Synthetic data provides ground truth for all four subtasks. 
+
+| Task           | What encoder must learn        | Loss |
+| -------------- | ------------------------------ | ---- |
+| Color transfer | color, shading, illumination   | MSE  |
+| Font transfer  | font geometry / glyph boundary | Dice |
+| Text removal   | background appearance/context  | MAE  |
+| Segmentation   | text location/spatial extent   | Dice |
+
 
 **Glyph encoder output**: <br/>
 
