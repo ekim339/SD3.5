@@ -1,0 +1,10 @@
+torch
+torchvision
+diffusers>=0.32.2
+transformers
+accelerate
+sentencepiece
+protobuf
+Pillow
+PyYAML
+safetensors

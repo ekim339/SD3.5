@@ -1,14 +1,6 @@
-Implement Self Prompting TextCtrl based on the paper Self Prompting DiT https://arxiv.org/pdf/2605.15523
+Implement the Self Prompting scene text editing with SD3.5 based on the paper Self Prompting DiT https://arxiv.org/pdf/2605.15523
 
-repository for TextCtrl: /home/ekim339/project/SD3.5/networks/TextCtrl
-
-TextCtrl uses explicit glyph and style encoders. However, you will omit these pretrained glyph and style encoders, replicating the visual self-prompting concept of Self Prompting DiT.
-
-Instead of using glyph and style encoders, render the target glyph with Pillow and use it as a visual glyph prompt. Use the original source text crop as a visual style prompt.
-
-Retain the frozen SD1.5 VAE, UNet backbone, and diffusion objective used by TextCtrl. Adapt the UNet input projection to receive the additional VAE-encoded visual prompts and mask.
-
-Use 200k of the SRNet_Datagen dataset and fine-tune the full SD1.5 UNet while keeping the VAE frozen.
+Use 200k of the SRNet_Datagen dataset and fine-tune the full SD3.5 backbone while keeping the VAE frozen.
 
 Dataset directory: /home/ekim339/project/SD3.5/datasets/SRNet_Datagen
 
@@ -24,15 +16,6 @@ The masked image $I_m$, visual glyph prompt, and visual style prompt are encoded
 
 ### Text Prompt Encoding
 Use the SD1.5 CLIP text encoder to encode the target replacement string. Inject the resulting embeddings into the UNet through its existing cross-attention layers. Style guidance is provided by the visual style prompt.
-
-### SD1.5 Diffusion Objective
-
-$\mathcal{L}_{\text{diff}} = \mathbb{E}_{z_0, \epsilon, t} \left[ \|\epsilon_\theta(z_t, t, c) - \epsilon\|_2^2 \right],$
-
-- $z_t$: noisy latent
-- $z_0$: clean latent
-- $\epsilon$: sampled Gaussian noise
-- c: visual prompt latents, CLIP text embeddings, and spatial mask information
 
 ### Style Prompt Construction
 To preserve the visual appearance of the original text, construct a visual style prompt:
@@ -57,8 +40,9 @@ represents the desired textual structure and the semantic meanings of the text p
   - binary mask is provided by SRNet_Datagen
   - model receives both masked image and binary mask
 2. Visual style prompt
-  - The paper computes the smallest rectangle enclosing the masked text region
-  - It then crops this region from the unmasked original image
+  - Computes the smallest rectangle enclosing the masked text region
+  - Then crop this region from the unmasked original image
+  - The cropped style prompt $I_s$ must either be padded/resized back to full image dimensions $(H, W)$ before VAE encoding, 
 3. Visual glyph prompt
   - Render target string using Pillow into a white-on-black glyph image <br/>
   $I_g = R(y_{\text{tgt}})$
@@ -68,10 +52,11 @@ represents the desired textual structure and the semantic meanings of the text p
 5. VAE encoding
   - Concatenate the noisy target latent, visual prompt latents, and latent-resolution mask <br/>
   $x_t=\text{Concat}_{\text{channel}}(z_t,z_m,z_g,z_s,m)$
-  - The VAE remains frozen; adapt the UNet input projection for the expanded channel count
+  - The VAE remains frozen
 6. Textual glyph condition
-  - Target text string is encoded with frozen T5 and textual visual/style prompt is encoded using a frozen CLIP.
+  - Target text string is encoded with frozen T5 and textual visual/style prompt is encoded using a frozen CLIP ViT-L & OpenCLIP BigG.
   - The resulting text token embeddings from CLIP and T5 are concatenated together to form a single continuous sequence of text tokens.
 7. Construct noisy target latent
-  - $z_t$ is produced using the existing SD1.5 forward diffusion process
-8. The expanded latent input and CLIP embeddings enter the adapted SD1.5 UNet
+  - $z_t$ is produced using the existing SD3.5 forward diffusion process
+8. DiT Forward Pass:
+  - Feed expanded $x_t$ along with text embeddings $(c_{\text{seq}}, c_{\text{pooled}})$ into the adapted SD3.5 MM-DiT block. Fine-tune the backbone using full-parameter training.

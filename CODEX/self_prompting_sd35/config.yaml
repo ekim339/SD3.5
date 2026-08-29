@@ -1,0 +1,32 @@
+seed: 42
+
+model:
+  pretrained_model: stabilityai/stable-diffusion-3.5-medium
+  dtype: bfloat16
+  gradient_checkpointing: true
+  max_sequence_length: 256
+
+dataset:
+  roots:
+    - datasets/SRNet_Datagen/train/train-50k-1
+    - datasets/SRNet_Datagen/train/train-50k-2
+    - datasets/SRNet_Datagen/train/train-50k-3
+    - datasets/SRNet_Datagen/train/train-50k-4
+  resolution: 512
+  limit: 200000
+  font_path: null
+
+training:
+  output_dir: CODEX/self_prompting_sd35/checkpoints
+  batch_size: 1
+  num_workers: 4
+  learning_rate: 1.0e-5
+  weight_decay: 0.01
+  max_grad_norm: 1.0
+  max_steps: 50000
+  gradient_accumulation_steps: 4
+  mixed_precision: bf16
+  foreground_weight: 5.0
+  background_weight: 1.0
+  log_every: 10
+  save_every: 2500
