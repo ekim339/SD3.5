@@ -12,6 +12,8 @@ Use 200k of the SRNet_Datagen dataset and fine-tune the full SD1.5 UNet while ke
 
 Dataset directory: /home/ekim339/project/SD3.5/datasets/SRNet_Datagen
 
+First of all you will mask the source text region of the input image. Then pass in rendered target glyph as visual glyph prompt and cropped source text as visual style prompt. Then you will encode glyph and style prompt using T5 and CLIP for each. During the training stage, task of the model is to recover the original source image. (In this case, source glyph = target glyph during training stage). But during the inference, srouce glyph and target glyph would be different.
+
 ### Masked Image Construction
 
 Given a source text crop $I \in \mathbb{R}^{H \times W \times 3}$ and its binary mask $M \in \{0,1\}^{H \times W}$ indicating the text region, construct a masked image:

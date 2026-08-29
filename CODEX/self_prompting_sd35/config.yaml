@@ -5,6 +5,20 @@ model:
   dtype: bfloat16
   gradient_checkpointing: true
   max_sequence_length: 256
+  lora:
+    rank: 16
+    alpha: 16
+    dropout: 0.0
+    target_modules:
+      - pos_embed.proj
+      - attn.add_k_proj
+      - attn.add_q_proj
+      - attn.add_v_proj
+      - attn.to_add_out
+      - attn.to_k
+      - attn.to_out.0
+      - attn.to_q
+      - attn.to_v
 
 dataset:
   roots:
@@ -20,7 +34,7 @@ training:
   output_dir: CODEX/self_prompting_sd35/checkpoints
   batch_size: 1
   num_workers: 4
-  learning_rate: 1.0e-5
+  learning_rate: 1.0e-4
   weight_decay: 0.01
   max_grad_norm: 1.0
   max_steps: 50000

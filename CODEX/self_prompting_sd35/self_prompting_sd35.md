@@ -1,62 +1,77 @@
-Implement the Self Prompting scene text editing with SD3.5 based on the paper Self Prompting DiT https://arxiv.org/pdf/2605.15523
+Implement Self Prompting scene-text editing with SD3.5 based on the paper
+Self Prompting DiT: https://arxiv.org/pdf/2605.15523
 
-Use 200k of the SRNet_Datagen dataset and fine-tune the full SD3.5 backbone while keeping the VAE frozen.
+Use 200k examples from SRNet_Datagen. Train PEFT LoRA adapters on the SD3.5
+MM-DiT while keeping the base transformer, VAE, and text encoders frozen. The
+expanded 65-channel patch projection is itself a convolutional LoRA target so
+all self-prompt inputs retain a trainable path into the frozen backbone.
 
-Dataset directory: /home/ekim339/project/SD3.5/datasets/SRNet_Datagen
+Dataset directory: `/home/ekim339/project/SD3.5/datasets/SRNet_Datagen`
 
-### Masked Image Construction
+### Masked image construction
 
-Given a source text crop $I \in \mathbb{R}^{H \times W \times 3}$ and its binary mask $M \in \{0,1\}^{H \times W}$ indicating the text region, construct a masked image:
+Given a source text crop $I \in \mathbb{R}^{H \times W \times 3}$ and its
+binary mask $M \in \{0,1\}^{H \times W}$ indicating the text region,
+construct a masked image:
 
 $I_m = I \odot (1 - M)$
 
-\* $\odot$ denotes element-wise multiplication.
+The masked image $I_m$, visual glyph prompt, and visual style prompt are encoded
+separately with the frozen SD3.5 VAE. Their latents are concatenated with the
+noisy target latent and resized binary mask as input to the adapted MM-DiT.
 
-The masked image $I_m$, visual glyph prompt, and visual style prompt are encoded separately using the frozen SD1.5 VAE. Their latents are concatenated with the noisy target latent and the resized binary mask as input to the adapted SD1.5 UNet.
+### Text prompt encoding
 
-### Text Prompt Encoding
-Use the SD1.5 CLIP text encoder to encode the target replacement string. Inject the resulting embeddings into the UNet through its existing cross-attention layers. Style guidance is provided by the visual style prompt.
+Encode the target replacement string with SD3.5's frozen CLIP-L, OpenCLIP bigG,
+and T5 encoders. Inject the resulting sequence and pooled embeddings through
+MM-DiT's existing joint-attention layers. Style guidance is supplied by the
+visual style prompt.
 
-### Style Prompt Construction
-To preserve the visual appearance of the original text, construct a visual style prompt:
-- Visual prompt:
-  - Input image: $I \in \mathbb{R}^{H \times W \times 3}$
-  - Binary mask indicating target text region: $M \in \{0,1\}^{H \times W}$
-  - Compute the maximal enclosing bounding rectangle of the
-masked area and crop the corresponding region from $I$ to obtain the visual style prompt $I_s$
-  - This cropped patch encodes region-specific appearance information, such as color, texture, font characteristics, and local illumination, and serves as a visual reference for style preservation.
+### Style prompt construction
 
-### Glyph Prompt Construction
-represents the desired textual structure and the semantic meanings of the text prompt
+To preserve the visual appearance of the original text:
 
-- Target text is rendered into a single-line glyph image using the Pillow library, producing a white-on-black glyph map $I_g$
-- Encode the target text string using the SD1.5 **CLIP** text encoder
-- Inject the resulting embeddings into the UNet through cross-attention
+- Start with source image $I$ and binary text mask $M$.
+- Compute the smallest rectangle enclosing the masked region.
+- Crop that region from $I$ to obtain visual style prompt $I_s$.
+- Pad the crop back to the model canvas before VAE encoding.
+
+The crop carries local color, texture, font, and illumination information.
+
+### Glyph prompt construction
+
+- Render the target string as a centered, single-line white-on-black image
+  $I_g$ with Pillow.
+- Encode $I_g$ with the frozen SD3.5 VAE.
+- Also encode the target string with the three frozen SD3.5 text encoders.
 
 ### Summary
 
-1. Mask the text region
-  - given source image $I$, create masked image $I_m$ <br/> $I_m = I \odot (1 - M)$
-  - binary mask is provided by SRNet_Datagen
-  - model receives both masked image and binary mask
-2. Visual style prompt
-  - Computes the smallest rectangle enclosing the masked text region
-  - Then crop this region from the unmasked original image
-  - The cropped style prompt $I_s$ must either be padded/resized back to full image dimensions $(H, W)$ before VAE encoding, 
-3. Visual glyph prompt
-  - Render target string using Pillow into a white-on-black glyph image <br/>
-  $I_g = R(y_{\text{tgt}})$
-4. Composite visual input
-  - Encode the masked image, glyph prompt, and style prompt separately with the frozen VAE <br/>
-  $z_m=E_{\text{VAE}}(I_m),\quad z_g=E_{\text{VAE}}(I_g),\quad z_s=E_{\text{VAE}}(I_s)$
-5. VAE encoding
-  - Concatenate the noisy target latent, visual prompt latents, and latent-resolution mask <br/>
-  $x_t=\text{Concat}_{\text{channel}}(z_t,z_m,z_g,z_s,m)$
-  - The VAE remains frozen
-6. Textual glyph condition
-  - Target text string is encoded with frozen T5 and textual visual/style prompt is encoded using a frozen CLIP ViT-L & OpenCLIP BigG.
-  - The resulting text token embeddings from CLIP and T5 are concatenated together to form a single continuous sequence of text tokens.
-7. Construct noisy target latent
-  - $z_t$ is produced using the existing SD3.5 forward diffusion process
-8. DiT Forward Pass:
-  - Feed expanded $x_t$ along with text embeddings $(c_{\text{seq}}, c_{\text{pooled}})$ into the adapted SD3.5 MM-DiT block. Fine-tune the backbone using full-parameter training.
+1. Mask the text region:
+
+   $I_m = I \odot (1 - M)$
+
+2. Build the visual style crop $I_s$ and pad it to $(H, W)$.
+
+3. Render the target glyph image:
+
+   $I_g = R(y_{\text{tgt}})$
+
+4. Encode the masked image, glyph prompt, and style prompt:
+
+   $z_m=E_{\text{VAE}}(I_m),\quad z_g=E_{\text{VAE}}(I_g),\quad
+   z_s=E_{\text{VAE}}(I_s)$
+
+5. Concatenate the noisy target latent, prompt latents, and latent-resolution
+   mask:
+
+   $x_t=\text{Concat}_{\text{channel}}(z_t,z_m,z_g,z_s,m)$
+
+6. Encode the replacement string with frozen CLIP-L, OpenCLIP bigG, and T5.
+
+7. Produce $z_t$ with SD3.5's flow-matching noise schedule.
+
+8. Feed expanded $x_t$ and text embeddings
+   $(c_{\text{seq}}, c_{\text{pooled}})$ into MM-DiT. Optimize only LoRA
+   tensors on the input projection and joint-attention projections; keep every
+   pretrained base parameter frozen.

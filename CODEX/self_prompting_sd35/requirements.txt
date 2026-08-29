@@ -1,6 +1,7 @@
 torch
 torchvision
-diffusers>=0.32.2
+diffusers>=0.40.0
+peft>=0.17.0
 transformers
 accelerate
 sentencepiece

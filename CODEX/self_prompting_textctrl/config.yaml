@@ -23,7 +23,7 @@ training:
   gradient_accumulation_steps: 16
   learning_rate: 1.0e-5
   weight_decay: 0.01
-  max_steps: 30000
+  max_steps: 70000
   mixed_precision: fp16
   gradient_checkpointing: true
   max_grad_norm: 1.0
