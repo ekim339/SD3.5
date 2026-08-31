@@ -1,9 +1,9 @@
 torch
 torchvision
-diffusers>=0.32.2
+diffusers>=0.40.0
 transformers
 accelerate
-peft
+peft>=0.17.0
 sentencepiece
 protobuf
 Pillow

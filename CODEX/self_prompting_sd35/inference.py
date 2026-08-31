@@ -33,7 +33,7 @@ def main() -> None:
     if not torch.cuda.is_available():
         raise RuntimeError("SD3.5 inference requires a CUDA device")
     device, dtype = torch.device("cuda"), torch.bfloat16
-    pipe = StableDiffusion3Pipeline.from_pretrained(args.model, torch_dtype=dtype).to(device)
+    pipe = StableDiffusion3Pipeline.from_pretrained(args.model, dtype=dtype).to(device)
     model = SelfPromptingSD35(pipe).to(device).eval()
     pipe.load_lora_weights(args.lora, adapter_name="trained")
     pipe.set_adapters("trained")

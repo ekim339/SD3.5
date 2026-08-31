@@ -21,6 +21,28 @@ accelerate launch -m CODEX.self_prompting_sd35.train \
   --config CODEX/self_prompting_sd35/config.yaml
 ```
 
+Before the first run, accept the gated SD3.5 Medium license on Hugging Face and
+authenticate with `hf auth login`.
+
+The checked-in configuration disables NCCL peer-to-peer transport before
+Accelerate initializes distributed training because P2P fails on mmplab2's RTX
+A4500 pair. Set `distributed.nccl_p2p_disable: false` on a host with working
+GPU peer-to-peer access.
+
+Periodic `checkpoint-*` directories contain LoRA weights plus Accelerate
+training state (optimizer, sampler/scaler when applicable, and RNG state).
+Resume one with:
+
+```bash
+accelerate launch -m CODEX.self_prompting_sd35.train \
+  --config CODEX/self_prompting_sd35/config.yaml \
+  --resume CODEX/self_prompting_sd35/checkpoints/checkpoint-002500
+```
+
+Full-finetuning checkpoints are not compatible with this LoRA optimizer state.
+Resume with the same base model, LoRA rank, and LoRA target modules used to
+create the checkpoint.
+
 Edit a marked region after training:
 
 ```bash
@@ -30,6 +52,7 @@ python -m CODEX.self_prompting_sd35.inference \
   --output edited.png
 ```
 
-The Markdown mentions `/home/ekim339/project/...`, but this checkout's dataset
-is under `/home/ekim339/projects/SD3.5/datasets/SRNet_Datagen`; the portable
-configuration therefore uses repository-relative paths to its four 50k shards.
+If training changed the base model or resolution, pass the matching `--model`
+and `--resolution` values during inference.
+
+Dataset paths are repository-relative; launch from the repository root.

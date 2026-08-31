@@ -1,4 +1,7 @@
 seed: 42
+distributed:
+  # Required by the two RTX A4500 GPUs on mmplab2; disable on hosts with working P2P.
+  nccl_p2p_disable: true
 model:
   pretrained_model: stabilityai/stable-diffusion-3.5-medium
   dtype: bfloat16

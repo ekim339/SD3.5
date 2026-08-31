@@ -8,7 +8,8 @@ from typing import Iterable
 import torch
 import torch.nn.functional as F
 from diffusers import StableDiffusion3Pipeline
-from peft import LoraConfig
+from diffusers.utils import convert_unet_state_dict_to_peft
+from peft import LoraConfig, set_peft_model_state_dict
 from peft.utils import get_peft_model_state_dict
 from torch import nn
 
@@ -134,5 +135,29 @@ class SelfPromptingSD35(nn.Module):
         StableDiffusion3Pipeline.save_lora_weights(
             directory,
             transformer_lora_layers=get_peft_model_state_dict(self.transformer),
+            transformer_lora_adapter_metadata=self.transformer.peft_config["default"].to_dict(),
             safe_serialization=True,
         )
+
+    def load_lora_weights(self, directory: str | Path) -> None:
+        state_dict = StableDiffusion3Pipeline.lora_state_dict(directory)
+        transformer_state = {
+            key.removeprefix("transformer."): value
+            for key, value in state_dict.items()
+            if key.startswith("transformer.")
+        }
+        if not transformer_state:
+            raise ValueError(f"No transformer LoRA weights found in {directory}")
+        peft_state = convert_unet_state_dict_to_peft(transformer_state)
+        incompatible = set_peft_model_state_dict(
+            self.transformer, peft_state, adapter_name="default"
+        )
+        missing = [
+            key for key in getattr(incompatible, "missing_keys", ())
+            if ".lora_" in key
+        ]
+        if missing:
+            raise ValueError(f"Missing LoRA checkpoint keys: {missing}")
+        unexpected = getattr(incompatible, "unexpected_keys", ())
+        if unexpected:
+            raise ValueError(f"Unexpected LoRA checkpoint keys: {unexpected}")

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import os
+import re
 from pathlib import Path
 
 import torch
@@ -22,10 +24,53 @@ def arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def configure_distributed_environment(config: dict) -> None:
+    """Apply NCCL workarounds before Accelerate creates the process group."""
+    if config.get("distributed", {}).get("nccl_p2p_disable", False):
+        os.environ["NCCL_P2P_DISABLE"] = "1"
+
+
+def checkpoint_step(path: str | Path) -> int:
+    match = re.fullmatch(r"checkpoint-(\d+)", Path(path).name)
+    if match is None:
+        raise ValueError("Resume directory must be named checkpoint-<step>")
+    return int(match.group(1))
+
+
+def unwrap_model(accelerator: Accelerator, model: torch.nn.Module) -> SelfPromptingSD35:
+    unwrapped = accelerator.unwrap_model(model)
+    return getattr(unwrapped, "_orig_mod", unwrapped)
+
+
+def register_lora_checkpoint_hooks(accelerator: Accelerator) -> None:
+    """Save adapter tensors instead of serializing the frozen backbone."""
+
+    def save_model_hook(models, weights, output_dir):
+        for saved_model in models:
+            unwrapped = unwrap_model(accelerator, saved_model)
+            if not isinstance(unwrapped, SelfPromptingSD35):
+                raise TypeError(f"Unexpected model in LoRA checkpoint: {type(unwrapped).__name__}")
+            if accelerator.is_main_process:
+                unwrapped.save_lora_weights(output_dir)
+        while weights:
+            weights.pop()
+
+    def load_model_hook(models, input_dir):
+        while models:
+            unwrapped = unwrap_model(accelerator, models.pop())
+            if not isinstance(unwrapped, SelfPromptingSD35):
+                raise TypeError(f"Unexpected model in LoRA checkpoint: {type(unwrapped).__name__}")
+            unwrapped.load_lora_weights(input_dir)
+
+    accelerator.register_save_state_pre_hook(save_model_hook)
+    accelerator.register_load_state_pre_hook(load_model_hook)
+
+
 def main() -> None:
     args = arguments()
     with args.config.open(encoding="utf-8") as handle:
         cfg = yaml.safe_load(handle)
+    configure_distributed_environment(cfg)
     training = cfg["training"]
     accelerator = Accelerator(
         gradient_accumulation_steps=training["gradient_accumulation_steps"],
@@ -40,7 +85,7 @@ def main() -> None:
     dtype = {"float16": torch.float16, "bfloat16": torch.bfloat16, "float32": torch.float32}[
         cfg["model"]["dtype"]
     ]
-    pipe = StableDiffusion3Pipeline.from_pretrained(cfg["model"]["pretrained_model"], torch_dtype=dtype)
+    pipe = StableDiffusion3Pipeline.from_pretrained(cfg["model"]["pretrained_model"], dtype=dtype)
     lora = cfg["model"]["lora"]
     model = SelfPromptingSD35(
         pipe, training["foreground_weight"], training["background_weight"],
@@ -49,8 +94,17 @@ def main() -> None:
     if cfg["model"]["gradient_checkpointing"]:
         model.transformer.enable_gradient_checkpointing()
     parameters = model.trainable_parameters()
+    if not parameters:
+        raise RuntimeError("No LoRA parameters were selected for training")
+    trainable_count = sum(parameter.numel() for parameter in parameters)
+    transformer_count = sum(parameter.numel() for parameter in model.transformer.parameters())
     optimizer = torch.optim.AdamW(parameters, lr=training["learning_rate"], weight_decay=training["weight_decay"])
+    register_lora_checkpoint_hooks(accelerator)
     model, optimizer, loader = accelerator.prepare(model, optimizer, loader)
+    accelerator.print(
+        f"LoRA trainable parameters: {trainable_count:,} / {transformer_count:,} "
+        f"({100.0 * trainable_count / transformer_count:.3f}%)"
+    )
     for name in ("text_encoder", "text_encoder_2", "text_encoder_3"):
         encoder = getattr(pipe, name, None)
         if encoder is not None:
@@ -59,7 +113,7 @@ def main() -> None:
     output.mkdir(parents=True, exist_ok=True)
     if args.resume:
         accelerator.load_state(args.resume)
-    step = 0
+    step = checkpoint_step(args.resume) if args.resume else 0
     model.train()
     while step < training["max_steps"]:
         for batch in loader:
@@ -85,14 +139,16 @@ def main() -> None:
                 if step % training["log_every"] == 0:
                     accelerator.print(f"step={step} loss={loss.detach().item():.6f}")
                 if step % training["save_every"] == 0:
-                    accelerator.save_state(output / f"state-{step:06d}")
-                    if accelerator.is_main_process:
-                        accelerator.unwrap_model(model).save_lora_weights(output / f"lora-{step:06d}")
+                    accelerator.wait_for_everyone()
+                    accelerator.save_state(output / f"checkpoint-{step:06d}")
+                    accelerator.wait_for_everyone()
                 if step >= training["max_steps"]:
                     break
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
         accelerator.unwrap_model(model).save_lora_weights(output / "lora-final")
+    accelerator.wait_for_everyone()
+    accelerator.end_training()
 
 
 if __name__ == "__main__":

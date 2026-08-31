@@ -1,0 +1,73 @@
+sample_seed: 1001
+target_seed: 2002
+generation_seed: 3003
+sample_count: 100
+
+# both, textctrl, or self_prompting_sd35
+mode: both
+# prepare, textctrl, self_prompting_sd35, ocr, report, or all
+stage: all
+overwrite: false
+output_dir: experiments/self_prompting_sd35/results
+
+# Set this to an earlier samples.jsonl to reuse its noisy inputs and targets
+# verbatim. The default creates them inside output_dir.
+samples_path: null
+
+dataset:
+  roots:
+    - datasets/SRNet_Datagen/train/train-50k-1
+    - datasets/SRNet_Datagen/train/train-50k-2
+    - datasets/SRNet_Datagen/train/train-50k-3
+    - datasets/SRNet_Datagen/train/train-50k-4
+  source_dir: i_s
+  mask_dir: mask_s
+  source_labels: i_s.txt
+
+input_noise:
+  seed: 4004
+  minimum_standard_deviation: 2.0
+  maximum_standard_deviation: 12.0
+
+targets:
+  letters: abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ
+  special_characters: ".!?,;:-_@#$%&*+="
+
+textctrl:
+  # TextCtrl needs its pinned legacy Python 3.8 environment. Override with
+  # TEXTCTRL_PYTHON if it lives elsewhere.
+  python_executable: ${oc.env:TEXTCTRL_PYTHON,/home/ekim339/miniconda3/envs/textctrl/bin/python}
+  repository_dir: networks/TextCtrl
+  checkpoint_path: networks/TextCtrl/weights/model.pth
+  starting_layer: 10
+  num_inference_steps: 50
+  guidance_scale: 2.0
+
+self_prompting_sd35:
+  python_executable: ${oc.env:SELF_PROMPTING_SD35_PYTHON,/home/ekim339/miniconda3/bin/python}
+  checkpoint_path: CODEX/self_prompting_sd35/checkpoints/checkpoint-050000
+  base_model: stabilityai/stable-diffusion-3.5-medium
+  resolution: 512
+  num_inference_steps: 28
+  max_sequence_length: 256
+  dtype: bfloat16
+  font_path: /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+
+ocr:
+  # The bundled OCR uses the same legacy TextCtrl environment.
+  python_executable: ${textctrl.python_executable}
+  repository_dir: ${textctrl.repository_dir}
+  checkpoint_path: networks/TextCtrl/weights/ocr_model.pth
+
+metrics:
+  # The requested upper/lower comparison is case-sensitive. See README.md for
+  # the released OCR checkpoint's charset limitation.
+  case_sensitive: true
+
+collage:
+  font_path: /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+  font_size: 13
+  cell_width: 300
+  image_height: 220
+  caption_height: 64
+
