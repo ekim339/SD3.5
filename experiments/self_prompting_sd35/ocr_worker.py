@@ -20,6 +20,12 @@ def arguments(argv=None):
     parser.add_argument("--checkpoint", required=True, help="ABINet ocr_model.pth")
     parser.add_argument("--manifest", required=True, help="JSONL job manifest")
     parser.add_argument("--predictions", required=True, help="Output JSONL predictions")
+    parser.add_argument(
+        "--model",
+        choices=sorted(VALID_MODELS),
+        default=None,
+        help="Only recognize jobs for this model (default: all models)",
+    )
     parser.add_argument("--overwrite", action="store_true")
     return parser.parse_args(argv)
 
@@ -153,6 +159,13 @@ def main(argv=None):
 
     jobs = _read_manifest(manifest, manifest.parent)
     by_index = {job["index"]: job for job in jobs}
+    selected_jobs = (
+        jobs
+        if args.model is None
+        else [job for job in jobs if job["model"] == args.model]
+    )
+    if not selected_jobs:
+        raise ValueError("No jobs selected for OCR")
     completed = {} if args.overwrite else _read_predictions(predictions, predictions.parent)
     unexpected = sorted(set(completed).difference(by_index))
     if unexpected:
@@ -168,7 +181,11 @@ def main(argv=None):
                 )
             )
 
-    missing_outputs = [job["_output_path"] for job in jobs if not job["_output_path"].is_file()]
+    missing_outputs = [
+        job["_output_path"]
+        for job in selected_jobs
+        if not job["_output_path"].is_file()
+    ]
     if missing_outputs:
         preview = "\n  - ".join(str(path) for path in missing_outputs[:20])
         suffix = "\n  ... and {} more".format(len(missing_outputs) - 20) if len(missing_outputs) > 20 else ""
@@ -180,7 +197,7 @@ def main(argv=None):
 
     from PIL import Image
 
-    for job in jobs:
+    for job in selected_jobs:
         try:
             with Image.open(job["_output_path"]) as image:
                 image.verify()
@@ -191,9 +208,13 @@ def main(argv=None):
                 )
             ) from exc
 
-    pending = [job for job in jobs if job["index"] not in completed]
+    pending = [job for job in selected_jobs if job["index"] not in completed]
     if not pending:
-        print("No pending OCR jobs ({} already complete).".format(len(jobs)))
+        print(
+            "No pending OCR jobs ({} selected jobs already complete).".format(
+                len(selected_jobs)
+            )
+        )
         return
 
     predictions.parent.mkdir(parents=True, exist_ok=True)

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 
 import pytest
 from PIL import Image
+
+from experiments.self_prompting_sd35 import ocr_worker
+from experiments.self_prompting_sd35 import run as experiment_run
 
 from experiments.self_prompting_sd35.collage import (
     render_case_collage,
@@ -124,6 +128,22 @@ def test_reports_and_collages_have_requested_shapes(tmp_path: Path) -> None:
     report_paths = write_reports(rows, tmp_path / "reports")
     assert all(path.is_file() for path in report_paths)
 
+    predictions_path = tmp_path / "ocr_predictions.jsonl"
+    predictions_path.write_text(
+        "".join(json.dumps(row) + "\n" for row in predictions.values()),
+        encoding="utf-8",
+    )
+    sd35_csv = experiment_run.write_sd35_ocr_results(
+        {"metrics": {"case_sensitive": True}},
+        jobs,
+        predictions_path,
+        tmp_path / "reports",
+    )
+    with sd35_csv.open(newline="", encoding="utf-8") as handle:
+        sd35_rows = list(csv.DictReader(handle))
+    assert len(sd35_rows) == 5 * len(TARGET_KEYS)
+    assert {row["model"] for row in sd35_rows} == {"self_prompting_sd35"}
+
     with (tmp_path / "reports" / "special_character_summary.csv").open(
         newline="", encoding="utf-8"
     ) as handle:
@@ -160,3 +180,92 @@ def test_output_directory_is_confined_to_experiment() -> None:
     with pytest.raises(ValueError, match="must stay under"):
         experiment_output_path("/tmp/self_prompting_sd35-results")
 
+
+
+def test_all_stage_runs_sd35_csv_before_textctrl(monkeypatch, tmp_path: Path) -> None:
+    events = []
+    config = {"overwrite": True}
+
+    monkeypatch.setattr(
+        experiment_run,
+        "run_self_prompting_sd35",
+        lambda *_: events.append("sd35_generate"),
+    )
+
+    def fake_ocr(*_, model=None, overwrite=None):
+        events.append(f"ocr:{model}:{overwrite}")
+
+    monkeypatch.setattr(experiment_run, "run_ocr", fake_ocr)
+
+    sd35_csv = tmp_path / "self_prompting_sd35_ocr_results.csv"
+
+    def fake_sd35_csv(*_):
+        events.append("sd35_csv")
+        return sd35_csv
+
+    monkeypatch.setattr(experiment_run, "write_sd35_ocr_results", fake_sd35_csv)
+    monkeypatch.setattr(
+        experiment_run, "run_textctrl", lambda *_: events.append("textctrl_generate")
+    )
+
+    final_report = tmp_path / "detailed_results.csv"
+
+    def fake_report(*_):
+        events.append("combined_report")
+        return [final_report]
+
+    monkeypatch.setattr(experiment_run, "run_report", fake_report)
+    outputs = experiment_run.run_all_stages(
+        config, [], [], tmp_path / "jobs.jsonl", tmp_path / "ocr.jsonl",
+        tmp_path, MODEL_KEYS,
+    )
+
+    assert events == [
+        "sd35_generate",
+        "ocr:self_prompting_sd35:True",
+        "sd35_csv",
+        "textctrl_generate",
+        "ocr:textctrl:False",
+        "combined_report",
+    ]
+    assert outputs == [sd35_csv, final_report]
+
+
+def test_filtered_ocr_does_not_require_other_model_outputs(tmp_path: Path) -> None:
+    repository = tmp_path / "TextCtrl"
+    (repository / "configs").mkdir(parents=True)
+    (repository / "configs" / "inference.yaml").write_text("config", encoding="utf-8")
+    package = repository / "src" / "module" / "abinet"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text("# package", encoding="utf-8")
+    checkpoint = repository / "ocr_model.pth"
+    checkpoint.write_bytes(b"checkpoint")
+
+    sd35_output = tmp_path / "sd35.png"
+    Image.new("RGB", (20, 10), "white").save(sd35_output)
+    textctrl_output = tmp_path / "not-generated-yet.png"
+    manifest = tmp_path / "jobs.jsonl"
+    manifest.write_text(
+        "\n".join(
+            [
+                json.dumps({"index": 0, "model": "textctrl", "output_path": str(textctrl_output)}),
+                json.dumps({"index": 1, "model": "self_prompting_sd35", "output_path": str(sd35_output)}),
+            ]
+        ) + "\n",
+        encoding="utf-8",
+    )
+    predictions = tmp_path / "ocr_predictions.jsonl"
+    predictions.write_text(
+        json.dumps({"index": 1, "ocr_predicted_text": "abcde", "output_path": str(sd35_output)}) + "\n",
+        encoding="utf-8",
+    )
+
+    ocr_worker.main(
+        [
+            "--repository", str(repository),
+            "--checkpoint", str(checkpoint),
+            "--manifest", str(manifest),
+            "--predictions", str(predictions),
+            "--model", "self_prompting_sd35",
+        ]
+    )

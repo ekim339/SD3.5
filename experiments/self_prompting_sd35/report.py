@@ -69,7 +69,11 @@ def members(
     return selected
 
 
-def write_detailed(rows: Sequence[Mapping[str, Any]], output_dir: Path) -> Path:
+def write_detailed(
+    rows: Sequence[Mapping[str, Any]],
+    output_dir: Path,
+    filename: str = "detailed_results.csv",
+) -> Path:
     fields = [
         "index",
         "sample_index",
@@ -88,7 +92,7 @@ def write_detailed(rows: Sequence[Mapping[str, Any]], output_dir: Path) -> Path:
         "mask_path",
         "output_path",
     ]
-    destination = output_dir / "detailed_results.csv"
+    destination = output_dir / filename
     with destination.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()

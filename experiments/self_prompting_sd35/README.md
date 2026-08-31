@@ -79,6 +79,13 @@ Run the complete experiment:
 python -m experiments.self_prompting_sd35.run
 ```
 
+The complete workflow is intentionally ordered as follows:
+
+1. Generate all fine-tuned Self-Prompting SD3.5 images.
+2. Run OCR on those images and save `self_prompting_sd35_ocr_results.csv`.
+3. Generate TextCtrl images only after that CSV has been closed on disk.
+4. Run TextCtrl OCR and write the combined reports and collages.
+
 Stages can be resumed independently:
 
 ```bash
@@ -115,6 +122,7 @@ results/
 │   ├── textctrl/
 │   └── self_prompting_sd35/
 ├── ocr_predictions.jsonl
+├── self_prompting_sd35_ocr_results.csv
 ├── detailed_results.csv
 ├── capital_lowercase_summary.csv
 ├── special_character_summary.csv

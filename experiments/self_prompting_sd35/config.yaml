@@ -46,7 +46,7 @@ textctrl:
 self_prompting_sd35:
   python_executable: ${oc.env:SELF_PROMPTING_SD35_PYTHON,/home/ekim339/miniconda3/bin/python}
   # Set in finetuned_sd35.yaml, which is merged before command-line overrides.
-  checkpoint_path: null
+  checkpoint_path: python -m experiments.self_prompting_sd35.run
   base_model: stabilityai/stable-diffusion-3.5-medium
   resolution: 512
   num_inference_steps: 28

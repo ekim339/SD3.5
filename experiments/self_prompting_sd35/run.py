@@ -23,7 +23,7 @@ from .data import (
     validate_samples,
     write_jsonl,
 )
-from .report import evaluate, write_reports
+from .report import evaluate, write_detailed, write_reports
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -186,7 +186,14 @@ def run_self_prompting_sd35(config: Mapping[str, Any], manifest: Path) -> None:
     run_subprocess(command)
 
 
-def run_ocr(config: Mapping[str, Any], manifest: Path, predictions: Path) -> None:
+def run_ocr(
+    config: Mapping[str, Any],
+    manifest: Path,
+    predictions: Path,
+    *,
+    model: str | None = None,
+    overwrite: bool | None = None,
+) -> None:
     section = config["ocr"]
     repository = resolve_path(PROJECT_ROOT, str(section["repository_dir"]))
     checkpoint = require_file(
@@ -204,9 +211,35 @@ def run_ocr(config: Mapping[str, Any], manifest: Path, predictions: Path) -> Non
         "--predictions",
         predictions,
     ]
-    if bool(config["overwrite"]):
+    if model is not None:
+        command.extend(["--model", model])
+    should_overwrite = bool(config["overwrite"]) if overwrite is None else overwrite
+    if should_overwrite:
         command.append("--overwrite")
     run_subprocess(command, cwd=repository, repository=repository)
+
+
+def write_sd35_ocr_results(
+    config: Mapping[str, Any],
+    jobs: Sequence[Mapping[str, Any]],
+    predictions_path: Path,
+    output_dir: Path,
+) -> Path:
+    """Persist every fine-tuned SD3.5 OCR result before TextCtrl starts."""
+
+    prediction_rows = read_jsonl(
+        require_file(predictions_path, "OCR prediction manifest")
+    )
+    predictions = {int(row["index"]): row for row in prediction_rows}
+    sd35_jobs = [job for job in jobs if job["model"] == "self_prompting_sd35"]
+    rows = evaluate(
+        sd35_jobs,
+        predictions,
+        case_sensitive=bool(config["metrics"]["case_sensitive"]),
+    )
+    return write_detailed(
+        rows, output_dir, filename="self_prompting_sd35_ocr_results.csv"
+    )
 
 
 def run_report(
@@ -250,6 +283,55 @@ def run_report(
     return outputs
 
 
+def run_all_stages(
+    config: Mapping[str, Any],
+    samples: Sequence[Mapping[str, Any]],
+    jobs: Sequence[Mapping[str, Any]],
+    manifest: Path,
+    predictions_path: Path,
+    output_dir: Path,
+    models: Sequence[str],
+) -> list[Path]:
+    """Run SD3.5 generation/OCR/export before allocating TextCtrl."""
+
+    outputs: list[Path] = []
+    first_ocr_pass = True
+    if "self_prompting_sd35" in models:
+        print("Generating fine-tuned Self-Prompting SD3.5 samples...", flush=True)
+        run_self_prompting_sd35(config, manifest)
+        print("Running OCR for fine-tuned Self-Prompting SD3.5...", flush=True)
+        run_ocr(
+            config,
+            manifest,
+            predictions_path,
+            model="self_prompting_sd35",
+            overwrite=bool(config["overwrite"]),
+        )
+        sd35_csv = write_sd35_ocr_results(
+            config, jobs, predictions_path, output_dir
+        )
+        outputs.append(sd35_csv)
+        print(f"Saved fine-tuned SD3.5 OCR results: {sd35_csv}", flush=True)
+        first_ocr_pass = False
+
+    if "textctrl" in models:
+        print("Generating TextCtrl samples...", flush=True)
+        run_textctrl(config, manifest)
+        print("Running OCR for TextCtrl...", flush=True)
+        run_ocr(
+            config,
+            manifest,
+            predictions_path,
+            model="textctrl",
+            overwrite=bool(config["overwrite"]) if first_ocr_pass else False,
+        )
+
+    outputs.extend(
+        run_report(config, samples, jobs, predictions_path, output_dir, models)
+    )
+    return outputs
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     raw_arguments = list(sys.argv[1:] if argv is None else argv)
     config_node, config = load_config(raw_arguments)
@@ -285,23 +367,27 @@ def main(argv: Sequence[str] | None = None) -> None:
         )
         return
 
-    if "textctrl" in models and stage in ("textctrl", "all"):
-        run_textctrl(config, manifest)
-    if "self_prompting_sd35" in models and stage in ("self_prompting_sd35", "all"):
-        run_self_prompting_sd35(config, manifest)
-
     predictions_path = output_dir / "ocr_predictions.jsonl"
-    if stage in ("ocr", "all"):
-        run_ocr(config, manifest, predictions_path)
     report_outputs: list[Path] = []
-    if stage in ("report", "all"):
-        report_outputs = run_report(
+    if stage == "all":
+        report_outputs = run_all_stages(
             config,
             samples,
             jobs,
+            manifest,
             predictions_path,
             output_dir,
             models,
+        )
+    elif stage == "self_prompting_sd35":
+        run_self_prompting_sd35(config, manifest)
+    elif stage == "textctrl":
+        run_textctrl(config, manifest)
+    elif stage == "ocr":
+        run_ocr(config, manifest, predictions_path)
+    elif stage == "report":
+        report_outputs = run_report(
+            config, samples, jobs, predictions_path, output_dir, models
         )
 
     print(
