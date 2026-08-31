@@ -29,6 +29,7 @@ from .report import evaluate, write_reports
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 EXPERIMENT_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = EXPERIMENT_DIR / "config.yaml"
+CHECKPOINT_CONFIG_PATH = EXPERIMENT_DIR / "finetuned_sd35.yaml"
 VALID_STAGES = {"prepare", "textctrl", "self_prompting_sd35", "ocr", "report", "all"}
 
 
@@ -93,7 +94,10 @@ def run_subprocess(
 
 def load_config(argv: Sequence[str]) -> tuple[DictConfig, Mapping[str, Any]]:
     config = OmegaConf.load(CONFIG_PATH)
-    config = OmegaConf.merge(config, OmegaConf.from_dotlist(list(argv)))
+    checkpoint_config = OmegaConf.load(CHECKPOINT_CONFIG_PATH)
+    config = OmegaConf.merge(
+        config, checkpoint_config, OmegaConf.from_dotlist(list(argv))
+    )
     resolved = OmegaConf.to_container(config, resolve=True)
     if not isinstance(resolved, Mapping):
         raise TypeError("Experiment configuration must be a mapping")

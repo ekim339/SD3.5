@@ -1,0 +1,6 @@
+# Directory containing the fine-tuned Self-Prompting SD3.5 LoRA checkpoint.
+# Relative paths are resolved from the repository root. The directory must
+# contain pytorch_lora_weights.safetensors.
+self_prompting_sd35:
+  checkpoint_path: CODEX/self_prompting_sd35/checkpoints/checkpoint-050000
+

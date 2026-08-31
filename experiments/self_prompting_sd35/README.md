@@ -34,6 +34,16 @@ The configured Self-Prompting checkpoint is the requested LoRA-only checkpoint:
 The SD3.5 worker first constructs the matching 65-channel SD3.5 Medium model and
 then loads this LoRA; the checkpoint is not treated as a standalone pipeline.
 
+Set the checkpoint directory in `finetuned_sd35.yaml`:
+
+```yaml
+self_prompting_sd35:
+  checkpoint_path: /absolute/path/to/your/checkpoint
+```
+
+The directory must contain `pytorch_lora_weights.safetensors`. A command-line
+`self_prompting_sd35.checkpoint_path=...` override still takes precedence.
+
 ## Environments
 
 Run the orchestrator and Self-Prompting SD3.5 worker from the project environment
