@@ -11,11 +11,11 @@ from diffusers import StableDiffusion3Pipeline
 from diffusers.utils import convert_unet_state_dict_to_peft
 from peft import LoraConfig, set_peft_model_state_dict
 from peft.utils import get_peft_model_state_dict
+from safetensors.torch import load_file, save_file
 from torch import nn
 
 
 DEFAULT_LORA_TARGETS = (
-    "pos_embed.proj",
     "attn.add_k_proj", "attn.add_q_proj", "attn.add_v_proj", "attn.to_add_out",
     "attn.to_k", "attn.to_q", "attn.to_v", "attn.to_out.0",
 )
@@ -41,7 +41,9 @@ def expand_sd3_input_projection(transformer: nn.Module, condition_channels: int)
 
 
 class SelfPromptingSD35(nn.Module):
-    """65-channel SD3.5 whose only trainable parameters are LoRA tensors."""
+    """65-channel SD3.5 with a full input projection and attention LoRA."""
+
+    INPUT_PROJECTION_NAME = "input_projection.safetensors"
 
     def __init__(
         self,
@@ -56,15 +58,20 @@ class SelfPromptingSD35(nn.Module):
         super().__init__()
         self.transformer, self.vae, self.scheduler = pipeline.transformer, pipeline.vae, pipeline.scheduler
         self.latent_channels = int(self.transformer.config.out_channels)
-        expand_sd3_input_projection(self.transformer, 3 * self.latent_channels + 1)
+        projection = expand_sd3_input_projection(
+            self.transformer, 3 * self.latent_channels + 1
+        )
         targets = list(lora_target_modules)
-        if "pos_embed.proj" not in targets:
-            raise ValueError("LoRA targets must include pos_embed.proj")
+        if "pos_embed.proj" in targets:
+            raise ValueError(
+                "pos_embed.proj is trained in full and must not be a LoRA target"
+            )
         self.transformer.requires_grad_(False)
         self.transformer.add_adapter(LoraConfig(
             r=int(lora_rank), lora_alpha=int(lora_alpha), lora_dropout=float(lora_dropout),
             target_modules=targets, init_lora_weights="gaussian", bias="none",
         ))
+        projection.requires_grad_(True)
         self.vae.requires_grad_(False).eval()
         for name in ("text_encoder", "text_encoder_2", "text_encoder_3"):
             encoder = getattr(pipeline, name, None)
@@ -72,8 +79,11 @@ class SelfPromptingSD35(nn.Module):
                 encoder.requires_grad_(False).eval()
         self.foreground_weight, self.background_weight = float(foreground_weight), float(background_weight)
         trainable = [name for name, value in self.transformer.named_parameters() if value.requires_grad]
-        if not trainable or any("lora_" not in name for name in trainable):
-            raise RuntimeError("Only PEFT LoRA tensors may be trainable")
+        allowed = lambda name: "lora_" in name or name.startswith("pos_embed.proj.")
+        if not trainable or any(not allowed(name) for name in trainable):
+            raise RuntimeError(
+                "Only the full input projection and PEFT LoRA tensors may be trainable"
+            )
 
     def trainable_parameters(self) -> list[nn.Parameter]:
         return [value for value in self.transformer.parameters() if value.requires_grad]
@@ -132,14 +142,31 @@ class SelfPromptingSD35(nn.Module):
         )
 
     def save_lora_weights(self, directory: str | Path) -> None:
+        directory = Path(directory)
+        directory.mkdir(parents=True, exist_ok=True)
         StableDiffusion3Pipeline.save_lora_weights(
             directory,
             transformer_lora_layers=get_peft_model_state_dict(self.transformer),
             transformer_lora_adapter_metadata=self.transformer.peft_config["default"].to_dict(),
             safe_serialization=True,
         )
+        projection = self.transformer.pos_embed.proj
+        save_file(
+            {
+                key: value.detach().cpu().contiguous()
+                for key, value in projection.state_dict().items()
+            },
+            str(directory / self.INPUT_PROJECTION_NAME),
+        )
 
     def load_lora_weights(self, directory: str | Path) -> None:
+        directory = Path(directory)
+        projection_path = directory / self.INPUT_PROJECTION_NAME
+        if not projection_path.is_file():
+            raise FileNotFoundError(
+                f"Missing expanded input projection checkpoint: {projection_path}"
+            )
+        self.transformer.pos_embed.proj.load_state_dict(load_file(str(projection_path)))
         state_dict = StableDiffusion3Pipeline.lora_state_dict(directory)
         transformer_state = {
             key.removeprefix("transformer."): value

@@ -34,6 +34,13 @@ The configured Self-Prompting checkpoint is the requested LoRA-only checkpoint:
 The SD3.5 worker first constructs the matching 65-channel SD3.5 Medium model and
 then loads this LoRA; the checkpoint is not treated as a standalone pipeline.
 
+Target text is encoded only by T5. Both CLIP towers receive content-free empty
+prompts so Diffusers still produces SD3.5's native neutral CLIP token block and
+required pooled conditioning tensor. Visual style guidance comes from the
+VAE-encoded source crop.
+
+Version 1 was trained with nonempty CLIP text, so using it with this T5-only
+
 Set the checkpoint directory in `finetuned_sd35.yaml`:
 
 ```yaml

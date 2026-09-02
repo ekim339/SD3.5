@@ -95,7 +95,7 @@ $\text{CER} = \frac{\sum_i D(\hat{y}_i, y_i)}{\sum_i |y_i|}.$
 
 - Accuracy of the target text increased as you mask greater proportions of the style encoding
   - From no masking to 70% masking: ACC increased 27%, NED increased 9.6%, CER decreased 27%
-- Accuracy of the first character almost did not change (check red) whereas the accracy of fourth and fifth characters significantly increase (check blue) as the masking proportion increased
+- Accuracy of the first character almost did not change (check red) whereas the accracy of fourth and fifth characters significantly increased (check blue) as the masking proportion increased
   - From no masking to 70% masking: first character accuracy did not improve at all, fourth character accuracy increased 33%, fifth character accuracy increased 34%.
 
 **Hypothesis 1: Improvement in accuracy of the target text is due to the source glyph leakage in the style encoder.**

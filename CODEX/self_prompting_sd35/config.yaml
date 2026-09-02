@@ -12,7 +12,6 @@ model:
     alpha: 16
     dropout: 0.0
     target_modules:
-      - pos_embed.proj
       - attn.add_k_proj
       - attn.add_q_proj
       - attn.add_v_proj
@@ -31,13 +30,18 @@ dataset:
   limit: 200000
   font_path: null
 training:
-  output_dir: CODEX/self_prompting_sd35/checkpoints
+  # Hydra override examples:
+  # training.output_dir=/path/to/training-output
+  # training.resume_from_checkpoint=latest
+  # Periodic checkpoint-* directories and lora-final are written here.
+  output_dir: CODEX/self_prompting_sd35/checkpoints/version2
+  resume_from_checkpoint: null
   batch_size: 1
   num_workers: 4
   learning_rate: 1.0e-4
   weight_decay: 0.01
   max_grad_norm: 1.0
-  max_steps: 50000
+  max_steps: 70000
   gradient_accumulation_steps: 4
   mixed_precision: bf16
   foreground_weight: 5.0

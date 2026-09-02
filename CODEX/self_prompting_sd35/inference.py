@@ -9,6 +9,7 @@ import torch
 from diffusers import StableDiffusion3Pipeline
 from PIL import Image
 
+from .conditioning import encode_t5_target_conditioning
 from .dataset import prepare_conditions
 from .model import SelfPromptingSD35
 
@@ -17,7 +18,7 @@ def arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--image", type=Path, required=True)
     parser.add_argument("--mask", type=Path, required=True)
-    parser.add_argument("--text", required=True)
+    parser.add_argument("--text", required=True, help="Target replacement text")
     parser.add_argument("--lora", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--model", default="stabilityai/stable-diffusion-3.5-medium")
@@ -35,17 +36,15 @@ def main() -> None:
     device, dtype = torch.device("cuda"), torch.bfloat16
     pipe = StableDiffusion3Pipeline.from_pretrained(args.model, dtype=dtype).to(device)
     model = SelfPromptingSD35(pipe).to(device).eval()
-    pipe.load_lora_weights(args.lora, adapter_name="trained")
-    pipe.set_adapters("trained")
+    model.load_lora_weights(args.lora)
     with Image.open(args.image) as opened:
         source = opened.convert("RGB")
     with Image.open(args.mask) as opened:
         mask_image = opened.convert("L")
     prepared = prepare_conditions(source, mask_image, args.text, args.resolution)
     tensors = {key: value.unsqueeze(0).to(device, dtype) for key, value in prepared.items()}
-    prompt, _, pooled, _ = pipe.encode_prompt(
-        prompt=args.text, prompt_2=args.text, prompt_3=args.text, device=device,
-        do_classifier_free_guidance=False, max_sequence_length=256,
+    prompt, pooled = encode_t5_target_conditioning(
+        pipe, args.text, device=device, max_sequence_length=256,
     )
     masked = model.encode_images(tensors["masked_image"], sample=False)
     glyph = model.encode_images(tensors["glyph_image"], sample=False)

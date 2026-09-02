@@ -1,0 +1,9 @@
+Capitalized target text
+model,ACC_mean,ACC_std,NED_mean,NED_std,CER_mean,CER_std
+TextCtrl,0.000000,0.000000,0.000000,0.000000,1.098000,0.170868
+Self Prompting SD3.5,0.000000,0.000000,0.000000,0.000000,1.094000,0.192780
+
+Lowercase target text
+model,ACC_mean,ACC_std,NED_mean,NED_std,CER_mean,CER_std
+TextCtrl,0.450000,0.497494,0.750571,0.311278,0.272000,0.350451
+Self Prompting SD3.5,0.000000,0.000000,0.053179,0.092506,0.994000,0.158632

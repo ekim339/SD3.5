@@ -2,26 +2,22 @@
 
 from __future__ import annotations
 
-import argparse
 import os
 import re
+import sys
 from pathlib import Path
 
+from hydra import compose, initialize_config_dir
 import torch
-import yaml
 from accelerate import Accelerator
 from diffusers import StableDiffusion3Pipeline
+from hydra.utils import to_absolute_path
+from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 
+from .conditioning import encode_t5_target_conditioning
 from .dataset import SRNetSelfPromptDataset
 from .model import SelfPromptingSD35
-
-
-def arguments() -> argparse.Namespace:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=Path, default=Path(__file__).with_name("config.yaml"))
-    parser.add_argument("--resume", type=str)
-    return parser.parse_args()
 
 
 def configure_distributed_environment(config: dict) -> None:
@@ -35,6 +31,26 @@ def checkpoint_step(path: str | Path) -> int:
     if match is None:
         raise ValueError("Resume directory must be named checkpoint-<step>")
     return int(match.group(1))
+
+
+def resolve_resume_checkpoint(value: str | None, checkpoint_dir: Path) -> Path | None:
+    if value in (None, "", "null"):
+        return None
+    if value == "latest":
+        candidates = sorted(
+            (path for path in checkpoint_dir.glob("checkpoint-*") if path.is_dir()),
+            key=checkpoint_step,
+        )
+        if not candidates:
+            raise FileNotFoundError(
+                f"No checkpoint-* directories found in {checkpoint_dir}"
+            )
+        return candidates[-1]
+    path = Path(to_absolute_path(value))
+    if not path.is_dir():
+        raise FileNotFoundError(f"Resume checkpoint directory does not exist: {path}")
+    checkpoint_step(path)
+    return path
 
 
 def unwrap_model(accelerator: Accelerator, model: torch.nn.Module) -> SelfPromptingSD35:
@@ -66,10 +82,19 @@ def register_lora_checkpoint_hooks(accelerator: Accelerator) -> None:
     accelerator.register_load_state_pre_hook(load_model_hook)
 
 
+def load_hydra_config(overrides: list[str] | None = None) -> DictConfig:
+    """Compose config without Hydra's Python-3.14-incompatible CLI parser."""
+    values = list(sys.argv[1:] if overrides is None else overrides)
+    config_dir = str(Path(__file__).resolve().parent)
+    with initialize_config_dir(config_dir=config_dir, version_base="1.3"):
+        return compose(config_name="config", overrides=values)
+
+
 def main() -> None:
-    args = arguments()
-    with args.config.open(encoding="utf-8") as handle:
-        cfg = yaml.safe_load(handle)
+    hydra_config = load_hydra_config()
+    cfg = OmegaConf.to_container(hydra_config, resolve=True)
+    if not isinstance(cfg, dict):
+        raise TypeError("Hydra config must resolve to a mapping")
     configure_distributed_environment(cfg)
     training = cfg["training"]
     accelerator = Accelerator(
@@ -77,7 +102,11 @@ def main() -> None:
         mixed_precision=training["mixed_precision"],
     )
     torch.manual_seed(cfg["seed"])
-    dataset = SRNetSelfPromptDataset(**cfg["dataset"])
+    dataset_config = dict(cfg["dataset"])
+    dataset_config["roots"] = [to_absolute_path(root) for root in dataset_config["roots"]]
+    if dataset_config.get("font_path"):
+        dataset_config["font_path"] = to_absolute_path(dataset_config["font_path"])
+    dataset = SRNetSelfPromptDataset(**dataset_config)
     loader = DataLoader(
         dataset, batch_size=training["batch_size"], shuffle=True,
         num_workers=training["num_workers"], pin_memory=True, drop_last=True,
@@ -102,26 +131,29 @@ def main() -> None:
     register_lora_checkpoint_hooks(accelerator)
     model, optimizer, loader = accelerator.prepare(model, optimizer, loader)
     accelerator.print(
-        f"LoRA trainable parameters: {trainable_count:,} / {transformer_count:,} "
+        f"Input-projection + LoRA trainable parameters: {trainable_count:,} / {transformer_count:,} "
         f"({100.0 * trainable_count / transformer_count:.3f}%)"
     )
     for name in ("text_encoder", "text_encoder_2", "text_encoder_3"):
         encoder = getattr(pipe, name, None)
         if encoder is not None:
             encoder.to(accelerator.device)
-    output = Path(training["output_dir"])
+    output = Path(to_absolute_path(training["output_dir"]))
     output.mkdir(parents=True, exist_ok=True)
-    if args.resume:
-        accelerator.load_state(args.resume)
-    step = checkpoint_step(args.resume) if args.resume else 0
+    resume = resolve_resume_checkpoint(training.get("resume_from_checkpoint"), output)
+    if resume is not None:
+        accelerator.print(f"Resuming complete training state from {resume}")
+        accelerator.load_state(resume)
+    step = checkpoint_step(resume) if resume is not None else 0
     model.train()
     while step < training["max_steps"]:
         for batch in loader:
-            strings = list(batch["source_text"])
+            target_strings = list(batch["target_text"])
             with torch.no_grad():
-                prompt, _, pooled, _ = pipe.encode_prompt(
-                    prompt=strings, prompt_2=strings, prompt_3=strings,
-                    device=accelerator.device, do_classifier_free_guidance=False,
+                prompt, pooled = encode_t5_target_conditioning(
+                    pipe,
+                    target_strings,
+                    device=accelerator.device,
                     max_sequence_length=cfg["model"]["max_sequence_length"],
                 )
             with accelerator.accumulate(model):
@@ -146,7 +178,7 @@ def main() -> None:
                     break
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
-        accelerator.unwrap_model(model).save_lora_weights(output / "lora-final")
+        unwrap_model(accelerator, model).save_lora_weights(output / "lora-final")
     accelerator.wait_for_everyone()
     accelerator.end_training()
 

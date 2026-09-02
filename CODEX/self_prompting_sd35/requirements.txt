@@ -8,4 +8,6 @@ sentencepiece
 protobuf
 Pillow
 PyYAML
+omegaconf
+hydra-core>=1.3
 safetensors

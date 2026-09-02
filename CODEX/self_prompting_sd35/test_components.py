@@ -2,6 +2,7 @@ import torch
 from PIL import Image
 from torch import nn
 
+from .conditioning import encode_t5_target_conditioning
 from .dataset import build_style_prompt, prepare_conditions, render_glyph
 from .model import expand_sd3_input_projection
 
@@ -35,3 +36,32 @@ def test_projection_is_65_channels_and_preserves_base():
     assert projection.in_channels == 65
     assert torch.equal(projection.weight[:, :16], original)
     assert torch.count_nonzero(projection.weight[:, 16:]) == 0
+
+
+def test_target_text_is_encoded_only_by_t5():
+    calls = []
+    expected_sequence = object()
+    expected_pooled = object()
+
+    class Pipeline:
+        def encode_prompt(self, **kwargs):
+            calls.append(kwargs)
+            return expected_sequence, None, expected_pooled, None
+
+    for target_text, targets in (
+        ("glyph", ["glyph"]),
+        (["first", "second"], ["first", "second"]),
+    ):
+        sequence, pooled = encode_t5_target_conditioning(
+            Pipeline(), target_text, device="cuda", max_sequence_length=256
+        )
+        call = calls[-1]
+        assert call["prompt"] == [""] * len(targets)
+        assert call["prompt_2"] == [""] * len(targets)
+        assert call["prompt_3"] == targets
+        assert call["device"] == "cuda"
+        assert call["num_images_per_prompt"] == 1
+        assert call["do_classifier_free_guidance"] is False
+        assert call["max_sequence_length"] == 256
+        assert sequence is expected_sequence
+        assert pooled is expected_pooled

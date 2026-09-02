@@ -320,13 +320,14 @@ def _import_pillow() -> Any:
     return Image
 
 
-def _load_runtime(dtype_name: str) -> tuple[Any, Any, Any, Any, Any]:
+def _load_runtime(dtype_name: str) -> tuple[Any, Any, Any, Any, Any, Any]:
     """Import the ML stack lazily and resolve the requested Torch dtype."""
 
     _ensure_repository_import_path()
     try:
         import torch
         from diffusers import StableDiffusion3Pipeline
+        from CODEX.self_prompting_sd35.conditioning import encode_t5_target_conditioning
         from CODEX.self_prompting_sd35.dataset import prepare_conditions
         from CODEX.self_prompting_sd35.model import SelfPromptingSD35
     except ImportError as exc:
@@ -341,7 +342,14 @@ def _load_runtime(dtype_name: str) -> tuple[Any, Any, Any, Any, Any]:
         "float16": torch.float16,
         "float32": torch.float32,
     }[dtype_name]
-    return torch, StableDiffusion3Pipeline, SelfPromptingSD35, prepare_conditions, torch_dtype
+    return (
+        torch,
+        StableDiffusion3Pipeline,
+        SelfPromptingSD35,
+        prepare_conditions,
+        encode_t5_target_conditioning,
+        torch_dtype,
+    )
 
 
 def _load_pipeline_and_adapter(
@@ -406,6 +414,7 @@ def _run_job(
     pipe: Any,
     model: Any,
     prepare_conditions: Any,
+    encode_target_conditioning: Any,
     device: Any,
     torch_dtype: Any,
     resolution: int,
@@ -432,12 +441,10 @@ def _run_job(
         }
 
         with torch.inference_mode():
-            prompt, _, pooled, _ = pipe.encode_prompt(
-                prompt=job.target_text,
-                prompt_2=job.target_text,
-                prompt_3=job.target_text,
+            prompt, pooled = encode_target_conditioning(
+                pipe,
+                job.target_text,
                 device=device,
-                do_classifier_free_guidance=False,
                 max_sequence_length=max_sequence_length,
             )
             masked = model.encode_images(tensors["masked_image"], sample=False)
@@ -579,9 +586,14 @@ def run(args: argparse.Namespace) -> int:
     validate_image_pairs(pending, image_module)
 
     dtype_name = normalize_dtype_name(args.dtype)
-    torch, pipeline_class, model_class, prepare_conditions, torch_dtype = _load_runtime(
-        dtype_name
-    )
+    (
+        torch,
+        pipeline_class,
+        model_class,
+        prepare_conditions,
+        encode_target_conditioning,
+        torch_dtype,
+    ) = _load_runtime(dtype_name)
     if not torch.cuda.is_available():
         raise WorkerError("Self-Prompting SD3.5 inference requires a CUDA device")
     device = torch.device("cuda")
@@ -612,6 +624,7 @@ def run(args: argparse.Namespace) -> int:
             pipe=pipe,
             model=model,
             prepare_conditions=prepare_conditions,
+            encode_target_conditioning=encode_target_conditioning,
             device=device,
             torch_dtype=torch_dtype,
             resolution=args.resolution,
