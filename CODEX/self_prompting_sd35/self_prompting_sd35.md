@@ -10,10 +10,12 @@ Dataset directory: `/home/ekim339/project/SD3.5/datasets/SRNet_Datagen`
 
 check this md file and generate code accordingly. keep all files under CODEX/self_prompting_sd35
 
-First mask the source text region of the input image. Then pass in the rendered
-target glyph as the visual glyph prompt and the cropped source text as the visual
-style prompt. Both visual prompts are VAE-encoded; only the target string is
-text-encoded, using T5. CLIP receives no target or style text.
+First mask the source text region of the input image, then pass in the rendered
+target glyph as the visual glyph prompt. During self-supervised reconstruction,
+do not supply the readable source crop. During paired cooldown only, also pass
+the cropped source text as the visual style prompt. Visual prompts are
+VAE-encoded; only the target string is text-encoded, using T5. CLIP receives no
+target or style text.
 
 ### Masked image construction
 
@@ -23,9 +25,11 @@ construct a masked image:
 
 $I_m = I \odot (1 - M)$
 
-The masked image $I_m$, visual glyph prompt, and visual style prompt are encoded
-separately with the frozen SD3.5 VAE. Their latents are concatenated with the
-noisy target latent and resized binary mask as input to the adapted MM-DiT.
+The masked image $I_m$ and visual glyph prompt are encoded separately with the
+frozen SD3.5 VAE. Cooldown additionally encodes the visual style prompt;
+self-supervised reconstruction uses exact-zero style channels. Their latents are
+concatenated with the current flow latent and resized binary mask as input to the
+adapted MM-DiT.
 
 ### Text prompt encoding
 
@@ -61,22 +65,42 @@ The crop carries local color, texture, font, and illumination information.
    $I_m = I \odot (1 - M)$
    - M is the mask
 
-2. Crop the original text region using the maximal bounding rectangle of M. This is the visual prompt $I_s$. Resize/pad $I_s$ into the visual-prompt canvas.
+2. For cooldown only, crop the original text region using the maximal bounding
+   rectangle of M. This is the visual prompt $I_s$. Resize/pad $I_s$ into the
+   visual-prompt canvas. Do not construct this prompt during self-supervision.
 
 3. Render the target glyph image:
    $I_g = R(y_{\text{tgt}})$
 
-4. Encode three visual conditions using frozen SD3.5 VAE: masked image, glyph prompt, and style prompt
+4. Encode the masked image and glyph prompt using the frozen SD3.5 VAE. Encode
+   the style prompt only during cooldown.
 
-   $z_m=E_{\text{VAE}}(I_m),\quad z_g=E_{\text{VAE}}(I_g),\quad
-   z_s=E_{\text{VAE}}(I_s)$
+   $z_m=E_{\text{VAE}}(I_m),\quad z_g=E_{\text{VAE}}(I_g)$
 
-5. Encode the ground truth target image (this is the original source image because model will be trained to recover the original image) and construct the noisy flow matching stat using the exact SD3.5 scheduler convention in your training code.
+   During cooldown, also compute $z_s=E_{\text{VAE}}(I_s)$.
+
+5. Encode the ground-truth target image. In self-supervised reconstruction the
+   target is the original source image and the ordinary SD3 flow objective is:
 
 $z_0 = E_{VAE}(I_{tgt})$
 
 $z_t = (1 - \sigma_t)z_0 + \sigma_t\epsilon$
+
 $\epsilon \sim \mathcal{N}(0,I)$
+
+$v^* = \epsilon - z_0$
+
+   In paired cooldown, also encode the source image and replace the Gaussian
+   path and target with the paper's equations (3)--(4):
+
+$z_t = (1 - \sigma_t)z_0^{src} + \sigma_t z_0^{tgt}$
+
+$v^* = z_0^{tgt} - z_0^{src}$
+
+   Cooldown must not sample a Gaussian endpoint. In both stages, minimize
+   ordinary full-latent mean squared error. The source mask is an MMDiT
+   conditioning input only; do not construct a source/target mask union or
+   apply foreground/background loss weights.
 
 6. Resize the binary mask to latent resolution
 

@@ -118,8 +118,11 @@ def main() -> None:
     pipe = StableDiffusion3Pipeline.from_pretrained(cfg["model"]["pretrained_model"], dtype=dtype)
     lora = cfg["model"]["lora"]
     model = SelfPromptingSD35(
-        pipe, training["foreground_weight"], training["background_weight"],
-        lora["rank"], lora["alpha"], lora["dropout"], lora["target_modules"],
+        pipe,
+        lora_rank=lora["rank"],
+        lora_alpha=lora["alpha"],
+        lora_dropout=lora["dropout"],
+        lora_target_modules=lora["target_modules"],
     )
     if cfg["model"]["gradient_checkpointing"]:
         model.transformer.enable_gradient_checkpointing()
@@ -157,6 +160,7 @@ def main() -> None:
             # Self-reconstruction must not receive the readable source crop;
             # cooldown is the only stage that supplies it.
             style_image = batch["style_image"] if mode == "cooldown" else None
+            source_image = batch["source_image"] if mode == "cooldown" else None
             with torch.no_grad():
                 prompt, pooled = encode_t5_target_conditioning(
                     pipe,
@@ -168,7 +172,8 @@ def main() -> None:
                 loss = model(
                     batch["target_image"], batch["masked_image"], batch["glyph_image"],
                     style_image, batch["mask"], prompt, pooled,
-                    loss_mask=batch["loss_mask"],
+                    objective=mode,
+                    source_image=source_image,
                 )
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:

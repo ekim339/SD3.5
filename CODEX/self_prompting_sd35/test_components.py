@@ -15,7 +15,12 @@ from .dataset import (
     read_labels,
     render_glyph,
 )
-from .model import SelfPromptingSD35, expand_sd3_input_projection
+from .model import (
+    SelfPromptingSD35,
+    build_flow_matching_path,
+    expand_sd3_input_projection,
+    flow_matching_mse,
+)
 from .train import checkpoint_step, resolve_resume_checkpoint
 
 
@@ -27,7 +32,7 @@ def _save_mask(path: Path, pixels: tuple[tuple[int, int], ...]) -> None:
 
 
 def _make_cooldown_shard(root: Path) -> None:
-    for directory in ("i_s", "mask_s", "t_f", "mask_t"):
+    for directory in ("i_s", "mask_s", "t_f"):
         (root / directory).mkdir(parents=True, exist_ok=True)
     # The changed record sorts after the equal-text record, and target labels
     # deliberately use the opposite line order to exercise keyed alignment.
@@ -41,7 +46,6 @@ def _make_cooldown_shard(root: Path) -> None:
         Image.new("RGB", (8, 8), "red").save(root / "i_s" / filename)
         Image.new("RGB", (8, 8), "blue").save(root / "t_f" / filename)
         _save_mask(root / "mask_s" / filename, ((1, 1),))
-        _save_mask(root / "mask_t" / filename, ((6, 6),))
 
 
 def test_training_uses_source_reconstruction():
@@ -54,7 +58,7 @@ def test_training_uses_source_reconstruction():
         source, mask, "source", 64, include_style_prompt=False
     )
     assert torch.equal(sample["source_image"], sample["target_image"])
-    assert torch.equal(sample["mask"], sample["loss_mask"])
+    assert "loss_mask" not in sample
     assert "style_image" not in sample
     assert sample["masked_image"][:, 20:40, 20:40].min() == -1
     assert build_style_prompt(source, mask, (64, 64)).size == (64, 64)
@@ -84,13 +88,11 @@ def test_cooldown_uses_aligned_target_and_source_only_conditions(tmp_path: Path)
     )
 
     # Only the source mask enters the model and constructs the masked/style
-    # inputs. The union with mask_t is exposed separately for loss weighting.
+    # inputs. The paper does not define a target-mask union for loss weighting.
     assert sample["mask"].sum().item() == 1
     assert sample["mask"][0, 1, 1].item() == 1
     assert sample["mask"][0, 6, 6].item() == 0
-    assert sample["loss_mask"].sum().item() == 2
-    assert sample["loss_mask"][0, 1, 1].item() == 1
-    assert sample["loss_mask"][0, 6, 6].item() == 1
+    assert "loss_mask" not in sample
     assert torch.equal(
         sample["masked_image"][:, 0, 0], torch.tensor([1.0, -1.0, -1.0])
     )
@@ -125,7 +127,7 @@ def test_dataset_defaults_to_style_free_self_reconstruction(
     sample = SRNetSelfPromptDataset([root], resolution=8)[0]
     assert sample["source_text"] == sample["target_text"] == "original"
     assert torch.equal(sample["source_image"], sample["target_image"])
-    assert torch.equal(sample["mask"], sample["loss_mask"])
+    assert "loss_mask" not in sample
     assert "style_image" not in sample
 
 
@@ -181,6 +183,59 @@ def test_missing_style_prompt_uses_zero_latent_without_changing_layout():
     style = torch.randn_like(noisy)
     with_style = model.composite_input(noisy, masked, glyph, style, mask)
     assert torch.equal(with_style[:, 6:8], style)
+
+
+def test_self_reconstruction_uses_the_sd3_gaussian_flow_path():
+    target = torch.tensor([0.0, 2.0, 4.0]).view(3, 1, 1, 1)
+    noise = torch.tensor([10.0, 10.0, 10.0]).view_as(target)
+    sigma = torch.tensor([0.0, 0.25, 1.0]).view_as(target)
+
+    interpolated, velocity = build_flow_matching_path(
+        target, sigma, objective="self_reconstruction", noise=noise
+    )
+
+    assert torch.equal(interpolated, torch.tensor([0.0, 4.0, 10.0]).view_as(target))
+    assert torch.equal(velocity, noise - target)
+
+
+def test_cooldown_uses_the_paper_source_to_target_path_without_noise(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    source = torch.tensor([1.0, 2.0, 3.0]).view(3, 1, 1, 1)
+    target = torch.tensor([9.0, 10.0, 11.0]).view_as(source)
+    sigma = torch.tensor([0.0, 0.25, 1.0]).view_as(source)
+
+    def reject_noise(*_args, **_kwargs):
+        raise AssertionError("cooldown must not construct a Gaussian endpoint")
+
+    monkeypatch.setattr(torch, "randn_like", reject_noise)
+    interpolated, velocity = build_flow_matching_path(
+        target, sigma, objective="cooldown", source=source
+    )
+
+    assert torch.equal(interpolated, torch.tensor([1.0, 4.0, 11.0]).view_as(source))
+    assert torch.equal(velocity, target - source)
+
+
+def test_flow_objective_rejects_incorrect_stage_endpoints():
+    latent = torch.zeros(1, 2, 2, 2)
+    sigma = torch.zeros(1, 1, 1, 1)
+
+    with pytest.raises(ValueError, match="cooldown requires"):
+        build_flow_matching_path(latent, sigma, objective="cooldown")
+    with pytest.raises(ValueError, match="must not receive a source"):
+        build_flow_matching_path(
+            latent, sigma, objective="self_reconstruction", source=latent
+        )
+    with pytest.raises(ValueError, match="Unsupported flow objective"):
+        build_flow_matching_path(latent, sigma, objective="other")
+
+
+def test_flow_loss_is_plain_full_latent_mse():
+    prediction = torch.tensor([[[[1.0, 3.0]]]])
+    velocity_target = torch.zeros_like(prediction)
+
+    assert flow_matching_mse(prediction, velocity_target).item() == 5.0
 
 
 def test_cooldown_can_resume_from_a_separate_self_training_directory(tmp_path: Path):

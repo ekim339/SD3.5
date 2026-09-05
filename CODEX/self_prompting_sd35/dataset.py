@@ -96,14 +96,12 @@ def prepare_conditions(
     font_path: str | Path | None = None,
     *,
     target_image: Image.Image | None = None,
-    target_mask: Image.Image | None = None,
     include_style_prompt: bool = True,
 ) -> dict[str, torch.Tensor]:
     """Build inputs, optionally using an aligned edited target for cooldown.
 
-    ``mask`` is always the source/edit mask exposed to the model. A cooldown
-    sample may additionally provide ``target_mask``; its union with the source
-    mask is used only to weight the loss and never enters the transformer.
+    ``mask`` is the source/edit mask exposed to the model as spatial
+    conditioning. It does not weight the flow-matching loss.
     Set ``include_style_prompt`` to false for self-reconstruction so the source
     text crop is neither constructed nor returned.
     """
@@ -121,19 +119,10 @@ def prepare_conditions(
     source_tensor = TF.to_tensor(source_canvas)
     target_tensor = TF.to_tensor(target_canvas)
     mask_tensor = (TF.to_tensor(mask_canvas) >= 0.5).float()
-    loss_mask = mask_tensor
-    if target_mask is not None:
-        target_mask_canvas = fit_canvas(
-            target_mask.convert("L"), size, Image.Resampling.NEAREST
-        ).point(lambda p: 255 if p >= 128 else 0)
-        loss_mask = torch.maximum(
-            mask_tensor, (TF.to_tensor(target_mask_canvas) >= 0.5).float()
-        )
     sample = {
         "source_image": source_tensor.mul(2).sub(1),
         "target_image": target_tensor.mul(2).sub(1),
         "mask": mask_tensor,
-        "loss_mask": loss_mask,
         "masked_image": (source_tensor * (1.0 - mask_tensor)).mul(2).sub(1),
         "glyph_image": TF.to_tensor(glyph).mul(2).sub(1),
     }
@@ -164,7 +153,7 @@ class SRNetSelfPromptDataset(Dataset[dict[str, Any]]):
             root = Path(root_value).expanduser().resolve()
             required_directories = ["i_s", "mask_s"]
             if mode == "cooldown":
-                required_directories.extend(("t_f", "mask_t"))
+                required_directories.append("t_f")
             for directory in required_directories:
                 if not (root / directory).is_dir():
                     raise DatasetFormatError(f"Missing directory: {root / directory}")
@@ -185,7 +174,7 @@ class SRNetSelfPromptDataset(Dataset[dict[str, Any]]):
                     continue
                 paths = [root / "i_s" / name, root / "mask_s" / name]
                 if mode == "cooldown":
-                    paths.extend((root / "t_f" / name, root / "mask_t" / name))
+                    paths.append(root / "t_f" / name)
                 if all(path.is_file() for path in paths):
                     self.records.append(
                         SRNetRecord(root, name, source_text, target_text)
@@ -205,12 +194,9 @@ class SRNetSelfPromptDataset(Dataset[dict[str, Any]]):
         with Image.open(record.root / "mask_s" / record.filename) as image:
             mask = image.convert("L")
         target = None
-        target_mask = None
         if self.mode == "cooldown":
             with Image.open(record.root / "t_f" / record.filename) as image:
                 target = image.convert("RGB")
-            with Image.open(record.root / "mask_t" / record.filename) as image:
-                target_mask = image.convert("L")
         sample: dict[str, Any] = prepare_conditions(
             source,
             mask,
@@ -218,7 +204,6 @@ class SRNetSelfPromptDataset(Dataset[dict[str, Any]]):
             self.resolution,
             self.font_path,
             target_image=target,
-            target_mask=target_mask,
             include_style_prompt=self.mode == "cooldown",
         )
         sample.update(

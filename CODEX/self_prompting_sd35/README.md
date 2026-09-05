@@ -13,20 +13,29 @@ configuration:
   Only this stage constructs and VAE-encodes the original source-text crop as
   the visual style prompt.
 
-In both modes, `mask_s` constructs the masked source. The target string is
-rendered as the glyph prompt and encoded by T5.
-Cooldown filters the two equal-text rows in the 200k dataset, leaving 199,998
-different-glyph pairs. Its target-only `mask_t` is never given to MMDiT; the
-union of `mask_s` and `mask_t` is used only to weight the training loss.
+In both modes, `mask_s` constructs the masked source and is an explicit
+spatial condition for MMDiT, not a loss weight. The target string is rendered
+as the glyph prompt and encoded by T5. Cooldown filters the two equal-text rows
+in the 200k dataset, leaving 199,998 different-glyph pairs; `mask_t` is not
+loaded. Both stages use ordinary full-latent mean squared error, with no
+foreground/background split or mask union. During cooldown, localization
+instead comes from the paired `target - source` velocity, which is intended to
+be zero outside the edited region because the paired images preserve
+non-target content.
 At inference, style guidance comes only from the visual style crop. CLIP-L and
 OpenCLIP receive empty prompts to retain SD3.5's native sequence layout and
 pooled conditioning without encoding target content.
 
 The frozen SD3.5 VAE separately encodes the masked image and glyph. It also
 encodes the style image during cooldown; self-reconstruction substitutes an
-exact zero latent for that condition. These 16-channel blocks are concatenated
-with the noisy 16-channel target and one mask channel in both stages, so the
-MM-DiT input remains 65 channels and checkpoints are shape-compatible. The base
+exact zero latent for that condition. In self-reconstruction, the model follows
+SD3's ordinary target-to-Gaussian rectified-flow path and predicts
+`noise - target`. Cooldown contains no Gaussian endpoint: it interpolates from
+the paired source latent at sigma zero to the edited target latent at sigma one
+and predicts `target - source`, following equations (3)--(4) of the paper.
+These 16-channel blocks are concatenated with the interpolated 16-channel latent
+and one mask channel in both stages, so the MM-DiT input remains 65 channels and
+checkpoints are shape-compatible. The base
 transformer, VAE, CLIP-L, OpenCLIP bigG, and T5 remain frozen. The expanded
 input convolution is trained in full, while PEFT LoRA adapters train only the
 MM-DiT joint-attention projections. Target text is encoded only by T5. The two
@@ -35,6 +44,12 @@ token block and pooled tensor required by SD3.5.
 
 Self-reconstruction checkpoints trained with the old readable style crop, or
 with nonempty CLIP text, require retraining for this contract.
+
+The paper defines the source-to-target construction as a cooldown *training*
+objective but does not specify a replacement inference solver. The inference
+entry point therefore retains SD3.5's normal Gaussian-starting, descending-sigma
+sampler. Feeding the paper's `target - source` velocity to Diffusers' ordinary
+descending scheduler from a source latent would have the wrong sign.
 
 Install dependencies from the repository root:
 

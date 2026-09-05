@@ -20,6 +20,53 @@ DEFAULT_LORA_TARGETS = (
     "attn.to_k", "attn.to_q", "attn.to_v", "attn.to_out.0",
 )
 
+FLOW_OBJECTIVES = ("self_reconstruction", "cooldown")
+
+
+def build_flow_matching_path(
+    target: torch.Tensor,
+    sigma: torch.Tensor,
+    *,
+    objective: str,
+    source: torch.Tensor | None = None,
+    noise: torch.Tensor | None = None,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return the interpolated latent and its velocity supervision.
+
+    Self-reconstruction uses SD3's ordinary clean-to-Gaussian rectified-flow
+    path. Cooldown follows Self-Prompting DiT Eq. (3)--(4) exactly: sigma=0 is
+    the paired source, sigma=1 is the edited target, and no Gaussian endpoint
+    participates in that objective.
+    """
+    if objective not in FLOW_OBJECTIVES:
+        raise ValueError(
+            f"Unsupported flow objective {objective!r}; expected one of {FLOW_OBJECTIVES}"
+        )
+    if objective == "self_reconstruction":
+        if source is not None:
+            raise ValueError("self_reconstruction must not receive a source latent")
+        noise = torch.randn_like(target) if noise is None else noise
+        if noise.shape != target.shape:
+            raise ValueError("Noise and target latents must have identical shapes")
+        return (1.0 - sigma) * target + sigma * noise, noise - target
+
+    if source is None:
+        raise ValueError("cooldown requires the paired source latent")
+    if noise is not None:
+        raise ValueError("cooldown must not receive a Gaussian-noise endpoint")
+    if source.shape != target.shape:
+        raise ValueError("Source and target latents must have identical shapes")
+    return (1.0 - sigma) * source + sigma * target, target - source
+
+
+def flow_matching_mse(
+    prediction: torch.Tensor, velocity_target: torch.Tensor
+) -> torch.Tensor:
+    """Paper-faithful full-latent squared-error reduction."""
+    if prediction.shape != velocity_target.shape:
+        raise ValueError("Prediction and velocity target must have identical shapes")
+    return (prediction.float() - velocity_target.float()).square().mean()
+
 
 def expand_sd3_input_projection(transformer: nn.Module, condition_channels: int) -> nn.Conv2d:
     old = transformer.pos_embed.proj
@@ -48,8 +95,6 @@ class SelfPromptingSD35(nn.Module):
     def __init__(
         self,
         pipeline,
-        foreground_weight: float = 5.0,
-        background_weight: float = 1.0,
         lora_rank: int = 16,
         lora_alpha: int = 16,
         lora_dropout: float = 0.0,
@@ -77,7 +122,6 @@ class SelfPromptingSD35(nn.Module):
             encoder = getattr(pipeline, name, None)
             if encoder is not None:
                 encoder.requires_grad_(False).eval()
-        self.foreground_weight, self.background_weight = float(foreground_weight), float(background_weight)
         trainable = [name for name, value in self.transformer.named_parameters() if value.requires_grad]
         allowed = lambda name: "lora_" in name or name.startswith("pos_embed.proj.")
         if not trainable or any(not allowed(name) for name in trainable):
@@ -119,10 +163,25 @@ class SelfPromptingSD35(nn.Module):
 
     def forward(
         self, target_image, masked_image, glyph_image, style_image, mask,
-        prompt_embeds, pooled_prompt_embeds, loss_mask=None,
+        prompt_embeds, pooled_prompt_embeds, *,
+        objective: str = "self_reconstruction", source_image=None,
     ) -> torch.Tensor:
+        if objective not in FLOW_OBJECTIVES:
+            raise ValueError(
+                f"Unsupported flow objective {objective!r}; expected one of {FLOW_OBJECTIVES}"
+            )
+        if objective == "cooldown":
+            if source_image is None:
+                raise ValueError("cooldown requires source_image")
+            if style_image is None:
+                raise ValueError("cooldown requires the visual style prompt")
+        elif source_image is not None:
+            raise ValueError("self_reconstruction must not receive source_image")
         with torch.no_grad():
             target = self.encode_images(target_image)
+            source = (
+                self.encode_images(source_image) if objective == "cooldown" else None
+            )
             masked = self.encode_images(masked_image)
             glyph = self.encode_images(glyph_image)
             style = None if style_image is None else self.encode_images(style_image)
@@ -130,25 +189,15 @@ class SelfPromptingSD35(nn.Module):
         timesteps = self.scheduler.timesteps.to(target.device)[indices]
         sigmas = self.scheduler.sigmas.to(target.device, target.dtype)[indices]
         sigma = sigmas.view(-1, *([1] * (target.ndim - 1)))
-        noise = torch.randn_like(target)
-        noisy = (1.0 - sigma) * target + sigma * noise
-        weighting_mask = mask if loss_mask is None else loss_mask
-        latent_mask = F.interpolate(
-            weighting_mask, target.shape[-2:], mode="nearest"
+        noisy, velocity_target = build_flow_matching_path(
+            target, sigma, objective=objective, source=source
         )
         prediction = self.transformer(
             hidden_states=self.composite_input(noisy, masked, glyph, style, mask),
             timestep=timesteps, encoder_hidden_states=prompt_embeds,
             pooled_projections=pooled_prompt_embeds, return_dict=True,
         ).sample
-        error = (prediction.float() - (noise - target).float()).square()
-        foreground = latent_mask.expand_as(error)
-        background = 1.0 - foreground
-        fg_loss = (error * foreground).sum() / foreground.sum().clamp_min(1.0)
-        bg_loss = (error * background).sum() / background.sum().clamp_min(1.0)
-        return (self.foreground_weight * fg_loss + self.background_weight * bg_loss) / (
-            self.foreground_weight + self.background_weight
-        )
+        return flow_matching_mse(prediction, velocity_target)
 
     def save_lora_weights(self, directory: str | Path) -> None:
         directory = Path(directory)

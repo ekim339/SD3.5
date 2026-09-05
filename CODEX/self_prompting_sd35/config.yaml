@@ -47,7 +47,5 @@ training:
   max_steps: 70000
   gradient_accumulation_steps: 4
   mixed_precision: bf16
-  foreground_weight: 5.0
-  background_weight: 1.0
   log_every: 10
   save_every: 2500
