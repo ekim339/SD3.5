@@ -1,4 +1,6 @@
 seed: 42
+# self_reconstruction: i_s -> i_s; cooldown: paired i_s -> t_f.
+mode: cooldown
 distributed:
   # Required by the two RTX A4500 GPUs on mmplab2; disable on hosts with working P2P.
   nccl_p2p_disable: true
@@ -34,7 +36,8 @@ training:
   # training.output_dir=/path/to/training-output
   # training.resume_from_checkpoint=latest
   # Periodic checkpoint-* directories and lora-final are written here.
-  output_dir: CODEX/self_prompting_sd35/checkpoints/version2
+  # Keep cooldown checkpoints separate from the self-reconstruction stage.
+  output_dir: CODEX/self_prompting_sd35/checkpoints/cooldown
   resume_from_checkpoint: null
   batch_size: 1
   num_workers: 4

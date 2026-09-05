@@ -102,8 +102,14 @@ class SelfPromptingSD35(nn.Module):
 
     def composite_input(
         self, noisy: torch.Tensor, masked: torch.Tensor, glyph: torch.Tensor,
-        style: torch.Tensor, mask: torch.Tensor,
+        style: torch.Tensor | None, mask: torch.Tensor,
     ) -> torch.Tensor:
+        # Keep the 65-channel architecture identical across stages so a
+        # self-reconstruction checkpoint can initialize cooldown training. The
+        # absent style condition is an exact zero latent; VAE-encoding a blank
+        # image would produce a nonzero latent and would not mean "no style".
+        if style is None:
+            style = torch.zeros_like(noisy)
         mask = F.interpolate(mask, noisy.shape[-2:], mode="nearest")
         hidden = torch.cat((noisy, masked, glyph, style, mask), dim=1)
         expected = 4 * self.latent_channels + 1
@@ -113,20 +119,23 @@ class SelfPromptingSD35(nn.Module):
 
     def forward(
         self, target_image, masked_image, glyph_image, style_image, mask,
-        prompt_embeds, pooled_prompt_embeds,
+        prompt_embeds, pooled_prompt_embeds, loss_mask=None,
     ) -> torch.Tensor:
         with torch.no_grad():
             target = self.encode_images(target_image)
             masked = self.encode_images(masked_image)
             glyph = self.encode_images(glyph_image)
-            style = self.encode_images(style_image)
+            style = None if style_image is None else self.encode_images(style_image)
         indices = torch.randint(0, self.scheduler.config.num_train_timesteps, (target.shape[0],), device=target.device)
         timesteps = self.scheduler.timesteps.to(target.device)[indices]
         sigmas = self.scheduler.sigmas.to(target.device, target.dtype)[indices]
         sigma = sigmas.view(-1, *([1] * (target.ndim - 1)))
         noise = torch.randn_like(target)
         noisy = (1.0 - sigma) * target + sigma * noise
-        latent_mask = F.interpolate(mask, target.shape[-2:], mode="nearest")
+        weighting_mask = mask if loss_mask is None else loss_mask
+        latent_mask = F.interpolate(
+            weighting_mask, target.shape[-2:], mode="nearest"
+        )
         prediction = self.transformer(
             hidden_states=self.composite_input(noisy, masked, glyph, style, mask),
             timestep=timesteps, encoder_hidden_states=prompt_embeds,

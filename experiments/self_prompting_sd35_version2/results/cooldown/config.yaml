@@ -1,21 +1,14 @@
-# prepare, generate, ocr, report, or all
 stage: all
 overwrite: false
 sample_count: 100
-
-# Every generated artifact is confined to this experiment directory.
 output_dir: experiments/self_prompting_sd35_version2/results/cooldown
-
-# Version-1 provenance. These supply the exact noisy images, sample metadata,
-# target strings, seeds, baseline summaries, and the v1 collage column.
 previous_results_dir: experiments/self_prompting_sd35_version1/results
-previous_samples_path: ${previous_results_dir}/samples.jsonl
-previous_detailed_results_path: ${previous_results_dir}/detailed_results.csv
-previous_case_summary_path: ${previous_results_dir}/capital_lowercase_summary.csv
-previous_special_summary_path: ${previous_results_dir}/special_character_summary.csv
-
+previous_samples_path: experiments/self_prompting_sd35_version1/results/samples.jsonl
+previous_detailed_results_path: experiments/self_prompting_sd35_version1/results/detailed_results.csv
+previous_case_summary_path: experiments/self_prompting_sd35_version1/results/capital_lowercase_summary.csv
+previous_special_summary_path: experiments/self_prompting_sd35_version1/results/special_character_summary.csv
 self_prompting_sd35:
-  python_executable: ${oc.env:SELF_PROMPTING_SD35_PYTHON,/home/ekim339/miniconda3/envs/sd3.5/bin/python}
+  python_executable: /home/ekim339/miniconda3/envs/sd3.5/bin/python
   checkpoint_path: /home/ekim339/project/SD3.5/CODEX/self_prompting_sd35/checkpoints/cooldown/checkpoint-057500
   base_model: stabilityai/stable-diffusion-3.5-medium
   revision: b940f670f0eda2d07fbb75229e779da1ad11eb80
@@ -24,15 +17,12 @@ self_prompting_sd35:
   max_sequence_length: 256
   dtype: bfloat16
   font_path: /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
-
 ocr:
-  python_executable: ${oc.env:OCR_PYTHON,/home/ekim339/miniconda3/envs/sd3.5/bin/python}
+  python_executable: /home/ekim339/miniconda3/envs/sd3.5/bin/python
   repository_dir: networks/TextCtrl
   checkpoint_path: networks/TextCtrl/weights/ocr_model.pth
-
 metrics:
   case_sensitive: true
-
 collage:
   font_path: /usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
   font_size: 13

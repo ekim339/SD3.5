@@ -1,4 +1,4 @@
-"""Accelerate entry point for LoRA self-reconstruction training."""
+"""Accelerate entry point for self-reconstruction and cooldown training."""
 
 from __future__ import annotations
 
@@ -102,11 +102,12 @@ def main() -> None:
         mixed_precision=training["mixed_precision"],
     )
     torch.manual_seed(cfg["seed"])
+    mode = str(cfg.get("mode", "self_reconstruction"))
     dataset_config = dict(cfg["dataset"])
     dataset_config["roots"] = [to_absolute_path(root) for root in dataset_config["roots"]]
     if dataset_config.get("font_path"):
         dataset_config["font_path"] = to_absolute_path(dataset_config["font_path"])
-    dataset = SRNetSelfPromptDataset(**dataset_config)
+    dataset = SRNetSelfPromptDataset(mode=mode, **dataset_config)
     loader = DataLoader(
         dataset, batch_size=training["batch_size"], shuffle=True,
         num_workers=training["num_workers"], pin_memory=True, drop_last=True,
@@ -130,6 +131,10 @@ def main() -> None:
     optimizer = torch.optim.AdamW(parameters, lr=training["learning_rate"], weight_decay=training["weight_decay"])
     register_lora_checkpoint_hooks(accelerator)
     model, optimizer, loader = accelerator.prepare(model, optimizer, loader)
+    accelerator.print(f"Training mode: {mode}; samples: {len(dataset):,}")
+    accelerator.print(
+        "Visual style prompt: " + ("enabled" if mode == "cooldown" else "disabled")
+    )
     accelerator.print(
         f"Input-projection + LoRA trainable parameters: {trainable_count:,} / {transformer_count:,} "
         f"({100.0 * trainable_count / transformer_count:.3f}%)"
@@ -149,6 +154,9 @@ def main() -> None:
     while step < training["max_steps"]:
         for batch in loader:
             target_strings = list(batch["target_text"])
+            # Self-reconstruction must not receive the readable source crop;
+            # cooldown is the only stage that supplies it.
+            style_image = batch["style_image"] if mode == "cooldown" else None
             with torch.no_grad():
                 prompt, pooled = encode_t5_target_conditioning(
                     pipe,
@@ -159,7 +167,8 @@ def main() -> None:
             with accelerator.accumulate(model):
                 loss = model(
                     batch["target_image"], batch["masked_image"], batch["glyph_image"],
-                    batch["style_image"], batch["mask"], prompt, pooled,
+                    style_image, batch["mask"], prompt, pooled,
+                    loss_mask=batch["loss_mask"],
                 )
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
