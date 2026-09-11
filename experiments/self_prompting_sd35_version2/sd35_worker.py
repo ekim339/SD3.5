@@ -32,7 +32,7 @@ except ImportError:  # Direct execution: the worker directory is on sys.path.
 MODEL_FILTER = "self_prompting_sd35_version2"
 DEFAULT_CHECKPOINT = Path(
     "/home/ekim339/project/SD3.5/CODEX/self_prompting_sd35/"
-    "checkpoints/version2/checkpoint-030000"
+    "checkpoints/self_reconstruction/checkpoint-050000"
 )
 DEFAULT_BASE_MODEL = "stabilityai/stable-diffusion-3.5-medium"
 LORA_WEIGHT_NAME = "pytorch_lora_weights.safetensors"
@@ -424,6 +424,31 @@ def _atomic_save(image: Any, output_path: Path) -> None:
         raise WorkerError(f"Could not save output image {output_path}: {exc}") from exc
 
 
+def _prepare_inference_conditions(
+    prepare_conditions: Any,
+    source: Any,
+    mask_image: Any,
+    target_text: str,
+    resolution: int,
+    font_path: Path | None,
+) -> dict[str, Any]:
+    """Build inference conditions and require the cropped source-style prompt."""
+
+    prepared = prepare_conditions(
+        source,
+        mask_image,
+        target_text,
+        resolution,
+        font_path=font_path,
+        include_style_prompt=True,
+    )
+    if "style_image" not in prepared:
+        raise WorkerError(
+            "Condition preparation did not return the required visual style prompt"
+        )
+    return prepared
+
+
 def _run_job(
     job: Job,
     *,
@@ -446,12 +471,13 @@ def _run_job(
         with image_module.open(job.mask_path) as opened:
             mask_image = opened.convert("L")
 
-        prepared = prepare_conditions(
+        prepared = _prepare_inference_conditions(
+            prepare_conditions,
             source,
             mask_image,
             job.target_text,
             resolution,
-            font_path=font_path,
+            font_path,
         )
         tensors = {
             key: value.unsqueeze(0).to(device=device, dtype=torch_dtype)

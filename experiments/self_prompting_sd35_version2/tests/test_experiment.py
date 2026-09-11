@@ -39,13 +39,13 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 PREVIOUS_RESULTS = (
     PROJECT_ROOT / "experiments" / "self_prompting_sd35_version1" / "results"
 )
-VERSION2_CHECKPOINT = (
+SELF_RECONSTRUCTION_CHECKPOINT = (
     PROJECT_ROOT
     / "CODEX"
     / "self_prompting_sd35"
     / "checkpoints"
-    / "version2"
-    / "checkpoint-030000"
+    / "self_reconstruction"
+    / "checkpoint-050000"
 )
 
 
@@ -122,7 +122,7 @@ def test_checkpoint_validation_requires_both_v2_artifacts(tmp_path: Path) -> Non
 
 
 def test_actual_checkpoint_contains_both_required_artifacts() -> None:
-    options = _worker_options(VERSION2_CHECKPOINT)
+    options = _worker_options(SELF_RECONSTRUCTION_CHECKPOINT)
     sd35_worker.validate_options(options)
 
 
@@ -170,6 +170,43 @@ def test_loader_uses_wrapper_loader_after_model_construction(tmp_path: Path) -> 
     assert isinstance(pipe, FakePipe)
     assert isinstance(model, FakeModel)
     assert events[-2:] == [("model.load", checkpoint), "model.eval"]
+
+
+def test_inference_explicitly_requests_source_style_crop() -> None:
+    source = Image.new("RGB", (12, 8), "red")
+    mask = Image.new("L", source.size, 0)
+    mask.paste(255, (3, 2, 9, 6))
+    style_image = object()
+    calls: list[object] = []
+
+    def fake_prepare(
+        received_source,
+        received_mask,
+        text,
+        resolution,
+        *,
+        font_path,
+        include_style_prompt,
+    ):
+        calls.append(
+            (
+                received_source,
+                received_mask,
+                text,
+                resolution,
+                font_path,
+                include_style_prompt,
+            )
+        )
+        return {"style_image": style_image}
+
+    font_path = Path("font.ttf")
+    prepared = sd35_worker._prepare_inference_conditions(
+        fake_prepare, source, mask, "TARGET", 512, font_path
+    )
+
+    assert prepared["style_image"] is style_image
+    assert calls == [(source, mask, "TARGET", 512, font_path, True)]
 
 
 def _synthetic_evaluation(tmp_path: Path, sample_count: int = 5):

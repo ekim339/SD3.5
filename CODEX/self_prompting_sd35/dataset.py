@@ -101,7 +101,8 @@ def prepare_conditions(
     """Build inputs, optionally using an aligned edited target for cooldown.
 
     ``mask`` is the source/edit mask exposed to the model as spatial
-    conditioning. It does not weight the flow-matching loss.
+    conditioning. Its tight rectangular bounding box is used only to construct
+    ``masked_image``. It does not weight the flow-matching loss.
     Set ``include_style_prompt`` to false for self-reconstruction so the source
     text crop is neither constructed nor returned.
     """
@@ -119,11 +120,20 @@ def prepare_conditions(
     source_tensor = TF.to_tensor(source_canvas)
     target_tensor = TF.to_tensor(target_canvas)
     mask_tensor = (TF.to_tensor(mask_canvas) >= 0.5).float()
+    rectangular_mask = Image.new("L", size, 0)
+    mask_box = mask_canvas.getbbox()
+    if mask_box is not None:
+        rectangular_mask.paste(255, mask_box)
+    rectangular_mask_tensor = (
+        TF.to_tensor(rectangular_mask) >= 0.5
+    ).float()
     sample = {
         "source_image": source_tensor.mul(2).sub(1),
         "target_image": target_tensor.mul(2).sub(1),
         "mask": mask_tensor,
-        "masked_image": (source_tensor * (1.0 - mask_tensor)).mul(2).sub(1),
+        "masked_image": (
+            source_tensor * (1.0 - rectangular_mask_tensor)
+        ).mul(2).sub(1),
         "glyph_image": TF.to_tensor(glyph).mul(2).sub(1),
     }
     if include_style_prompt:

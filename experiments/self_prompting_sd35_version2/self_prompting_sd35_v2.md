@@ -1,7 +1,7 @@
 In this experiment you will evaluate Self Prompting SD3.5 verison 2.
 
 
-Self Prompting SD3.5 weights: /home/ekim339/project/SD3.5/CODEX/self_prompting_sd35/checkpoints/version2/checkpoint-030000
+Self Prompting SD3.5 weights: /home/ekim339/project/SD3.5/CODEX/self_prompting_sd35/checkpoints/self_reconstruction/checkpoint-050000
 
 Check the files under /home/ekim339/project/SD3.5/CODEX/self_prompting_sd35 to look at self prompting sd3.5 pipeline. Dataprocessing and inputs to network are completely different from TextCtrl.
 

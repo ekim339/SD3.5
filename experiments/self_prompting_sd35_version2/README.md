@@ -1,6 +1,6 @@
 # Self-Prompting SD3.5 version-2 evaluation
 
-This package implements the experiment in `self_promptsing_sd35_v2.md`. All
+This package implements the experiment in `self_prompting_sd35_v2.md`. All
 new manifests, generated images, OCR predictions, reports, and collages stay
 inside `experiments/self_prompting_sd35_version2/results`.
 
@@ -20,6 +20,9 @@ inside `experiments/self_prompting_sd35_version2/results`.
 
 ## Version-2 model path
 
+The default checkpoint is
+`CODEX/self_prompting_sd35/checkpoints/self_reconstruction/checkpoint-050000`.
+
 The generation worker constructs `SelfPromptingSD35` before restoring the
 checkpoint, then calls `model.load_lora_weights(...)`. This restores both:
 
@@ -33,8 +36,9 @@ snapshot available to the version-2 trainer.
 The target string is rendered as the glyph condition and is encoded only by
 T5. Both CLIP towers receive an empty, content-free prompt; their native pooled
 conditioning tensor is retained so the SD3.5 transformer receives the tensor
-layout it expects. The visual style condition remains the VAE encoding of the
-source text crop.
+layout it expects. The worker explicitly requests the visual style condition,
+which is built by taking the tight source-mask bounding box from the noisy
+editing input, padding it to the model canvas, and VAE-encoding it.
 
 ## Run
 
@@ -73,22 +77,25 @@ use `overwrite=true`; this prevents mixed or mislabeled result sets.
 
 ## Outputs
 
-- `results/config.yaml`: resolved run configuration snapshot
-- `results/samples.jsonl`: normalized 100-sample manifest
-- `results/jobs.jsonl`: the 800 version-2 generation jobs
-- `results/generation_provenance.json`: content signature and completion state
+The default output root is `results/self_reconstruction`; the paths below are
+relative to the experiment package.
+
+- `results/self_reconstruction/config.yaml`: resolved run configuration snapshot
+- `results/self_reconstruction/samples.jsonl`: normalized 100-sample manifest
+- `results/self_reconstruction/jobs.jsonl`: the 800 version-2 generation jobs
+- `results/self_reconstruction/generation_provenance.json`: content signature and completion state
   used to validate generation resumes
-- `results/inputs/`: exact byte copies of the v1 noisy inputs
-- `results/generated/self_prompting_sd35_version2/<target_key>/`: edited images
-- `results/ocr_predictions.jsonl`: per-image ABINet predictions
-- `results/detailed_results.csv`: all v2 predictions and metrics
-- `results/capital_lowercase_summary.csv`: copied v1 two-table report plus one
+- `results/self_reconstruction/inputs/`: exact byte copies of the v1 noisy inputs
+- `results/self_reconstruction/generated/self_prompting_sd35_version2/<target_key>/`: edited images
+- `results/self_reconstruction/ocr_predictions.jsonl`: per-image ABINet predictions
+- `results/self_reconstruction/detailed_results.csv`: all v2 predictions and metrics
+- `results/self_reconstruction/capital_lowercase_summary.csv`: copied v1 two-table report plus one
   version-2 row in each table
-- `results/special_character_summary.csv`: copied v1 report plus one version-2
+- `results/self_reconstruction/special_character_summary.csv`: copied v1 report plus one version-2
   row containing all 18 mean/std cells
-- `results/capital_lowercase_collage.png`: literal requested 3x5 layout—noisy
+- `results/self_reconstruction/capital_lowercase_collage.png`: literal requested 3x5 layout—noisy
   source, v1 uppercase, and v2 lowercase
-- `results/special_character_collage.png`: first noisy source plus six v2 targets
+- `results/self_reconstruction/special_character_collage.png`: first noisy source plus six v2 targets
   in a 7x1 layout
 
 ## Tests
@@ -110,13 +117,14 @@ scores measure the released OCR system as well as image quality.
 
 ## Training/inference caveat
 
-The evaluator enforces T5-only target conditioning at inference. A checkpoint
-matches that contract only when its trainer loaded the same code. For the
-configured checkpoint-030000, the conditioning and training files predate the
-active trainer's launch, and the checkpoint was saved afterward; this strongly
-supports matching T5-only provenance.
+The evaluator uses T5-only target conditioning and ordinary Gaussian-start SD3
+sampling, which is the correct inference path for the configured
+`self_reconstruction/checkpoint-050000` checkpoint.
 
-Training is still self-reconstruction: source and target text are identical,
-and the visual style crop contains that same word. At evaluation time the new
-target differs while the style crop retains the source content. The model has
-not seen disentangled content/style pairs and may therefore copy source glyphs.
+That checkpoint was trained without a visual style prompt. Its saved input
+projection has the expected 65-channel shape, but all weights connected to the
+16 style-latent channels are exactly zero. The evaluator still crops,
+VAE-encodes, and passes the requested source style prompt, but it cannot affect
+this checkpoint's prediction. Learned style conditioning requires continuing
+from this checkpoint with the cooldown stage; self-reconstruction alone may
+also favor copying the source glyph when asked to edit to a different target.
