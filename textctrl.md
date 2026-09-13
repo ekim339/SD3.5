@@ -91,7 +91,8 @@ $C_{\mathrm{struct}} \in \mathbb{R}^{L \times d}$
 - This is intended to make the encoder explicitly learn different aspects of text appearance rather than relying on an unconstrained latent feature.
 
 - [Glyph/style branch] Text color transfer
-  - The network receives a black-and-white text glyph and style information from the source image. - It must reconstruct the source color appearance: $x_{glyph}, c_t \rightarrow c_r$
+  - The network receives a black-and-white text glyph and style information from the source image. 
+  - It must reconstruct the source color appearance: $x_{glyph}, c_t \rightarrow c_r$
   - Code uses a pretrained-style ResNet feature extractor plus AdaIN (Adaptive Instance Normalization module) to inject color/style statistics.
   - Training loss is MSE: <br/>
   $\mathcal{L}_{\mathrm{color}} = \|\hat{c}_r - c_r\|_2^2$
@@ -129,7 +130,7 @@ Synthetic data provides ground truth for all four subtasks.
 | Segmentation   | text location/spatial extent   | Dice |
 
 
-**Glyph encoder output**: <br/>
+**Style encoder output**: <br/>
 
 The source image is $I_s \in \mathbb{R}^{B \times 3 \times 256 \times 256}$
 

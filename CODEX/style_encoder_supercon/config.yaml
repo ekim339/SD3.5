@@ -1,0 +1,46 @@
+seed: 42
+device: auto
+
+checkpoint:
+  textctrl_repository: networks/TextCtrl
+  pretrained: networks/TextCtrl/weights/style_encoder.pth
+  # Set true when using a full prestyle/Lightning checkpoint. The released
+  # style_encoder.pth is a pretrained ViT backbone and has no branch weights.
+  require_glyph_head_weights: false
+
+dataset:
+  roots:
+    - datasets/SRNet_Datagen/train/train-50k-1
+    - datasets/SRNet_Datagen/train/train-50k-2
+    - datasets/SRNet_Datagen/train/train-50k-3
+    - datasets/SRNet_Datagen/train/train-50k-4
+  limit: null
+  require_different_text: true
+  strict: true
+  validation_records: 1000
+  split_seed: 5101
+
+model:
+  # TextCtrl's dual-branch prestyle model was trained at 128 x 128.
+  image_size: 128
+  patch_size: 16
+  embed_dim: 768
+  pooling: mean
+
+training:
+  output_dir: CODEX/style_encoder_supercon/checkpoints
+  resume_from: null
+  # Each style contributes i_s and t_f, so the image batch is twice this value.
+  styles_per_batch: 16
+  hard_negative_probability: 0.5
+  batch_seed: 43
+  num_workers: 8
+  learning_rate: 0.00001
+  weight_decay: 0.0001
+  temperature: 0.1
+  precision: bfloat16
+  max_steps: 20000
+  max_grad_norm: 1.0
+  log_every: 20
+  validate_every: 500
+  save_every: 1000
