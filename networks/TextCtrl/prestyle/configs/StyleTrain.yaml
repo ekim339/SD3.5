@@ -1,0 +1,60 @@
+data:
+  target: "dataset.WrappedDataModule"
+  batch_size: 16
+  train:
+    size: 128
+    root_dir: "/home/ekim339/projects/SD3.5/datasets/SRNet_Datagen/train/"
+    font_dir: "/usr/share/fonts/truetype/dejavu/"
+    template_font: "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+
+  validation:
+    size: 128
+    root_dir: "/home/ekim339/projects/SD3.5/datasets/SRNet_Datagen/eval/"
+    font_dir: "/usr/share/fonts/truetype/dejavu/"
+    template_font: "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+
+num_workers: 16
+check_freq: 10
+checkpoint_dir: "/home/ekim339/projects/SD3.5/CODEX/style_encoder_replicate/checkpoints"
+
+
+
+model:
+  target: trainer.StyleNet
+  params:
+    image_size: 128
+    patch_size: 16
+    in_chans: 3
+    num_classes: 0
+    embed_dim: 768
+    trainable: true
+    lr: 1e-5
+    alpha_removal: 1.0
+    alpha_seg: 1.0
+    alpha_color: 1.0
+    alpha_font: 1.0
+    enable_spatial_head: true
+    enable_glyph_head: true
+
+
+
+
+
+lightning:
+  log_every_n_steps: 50
+  accumulate_grad_batches: 8
+  max_epochs: 80
+  accelerator: "cuda"
+  devices: [0, 1]
+  strategy: ddp
+  default_root_dir: "./logs/pre_style_logs"
+
+
+imagelogger_callback:
+  target: "trainer.StyleNetImageLogger"
+  params:
+    train_batch_frequency: 4500
+    valid_batch_frequency: 2
+    disable_wandb: true
+    generation_kwargs:
+      seed: 42
