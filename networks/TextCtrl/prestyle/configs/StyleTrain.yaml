@@ -3,19 +3,19 @@ data:
   batch_size: 16
   train:
     size: 128
-    root_dir: "/home/ekim339/projects/SD3.5/datasets/SRNet_Datagen/train/"
-    font_dir: "/usr/share/fonts/truetype/dejavu/"
+    root_dir: "/home/ekim339/project/SD3.5/datasets/SRNet_Datagen/train/"
+    font_dir: "/home/ekim339/project/SD3.5/datasets/SRNet_Datagen/resources/generator/fonts/"
     template_font: "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
   validation:
     size: 128
-    root_dir: "/home/ekim339/projects/SD3.5/datasets/SRNet_Datagen/eval/"
-    font_dir: "/usr/share/fonts/truetype/dejavu/"
+    root_dir: "/home/ekim339/project/SD3.5/datasets/SRNet_Datagen/eval/"
+    font_dir: "/home/ekim339/project/SD3.5/datasets/SRNet_Datagen/resources/local_fonts/dejavu-fonts-ttf-2.37/ttf/"
     template_font: "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 
 num_workers: 16
 check_freq: 10
-checkpoint_dir: "/home/ekim339/projects/SD3.5/CODEX/style_encoder_replicate/checkpoints"
+checkpoint_dir: "/home/ekim339/project/SD3.5/CODEX/style_encoder_replicate/checkpoints"
 
 
 
@@ -45,8 +45,8 @@ lightning:
   accumulate_grad_batches: 8
   max_epochs: 80
   accelerator: "cuda"
-  devices: [0, 1]
-  strategy: ddp
+  devices: 2
+  strategy: "ddp_find_unused_parameters_false"
   default_root_dir: "./logs/pre_style_logs"
 
 

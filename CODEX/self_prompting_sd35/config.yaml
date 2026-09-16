@@ -1,6 +1,8 @@
+# accelerate launch -m CODEX.self_prompting_sd35.train   mode=self_reconstruction   training.output_dir=CODEX/self_prompting_sd35/checkpoints/self_reconstruction   training.resume_from_checkpoint=/home/ekim339/project/SD3.5/CODEX/self_prompting_sd35/checkpoints/self_reconstruction/checkpoint-040000   training.max_steps=50000
+
 seed: 42
 # self_reconstruction: i_s -> i_s; cooldown: paired i_s -> t_f.
-mode: cooldown
+mode: self_reconstruction
 distributed:
   # Required by the two RTX A4500 GPUs on mmplab2; disable on hosts with working P2P.
   nccl_p2p_disable: true
