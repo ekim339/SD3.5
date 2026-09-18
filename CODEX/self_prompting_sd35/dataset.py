@@ -100,9 +100,9 @@ def prepare_conditions(
 ) -> dict[str, torch.Tensor]:
     """Build inputs, optionally using an aligned edited target for cooldown.
 
-    ``mask`` is the source/edit mask exposed to the model as spatial
-    conditioning. Its tight rectangular bounding box is used only to construct
-    ``masked_image``. It does not weight the flow-matching loss.
+    The source/edit mask's tight rectangular bounding box is used for both
+    spatial conditioning and ``masked_image``. It does not weight the
+    flow-matching loss.
     Set ``include_style_prompt`` to false for self-reconstruction so the source
     text crop is neither constructed nor returned.
     """
@@ -119,7 +119,6 @@ def prepare_conditions(
     glyph = render_glyph(text, size, font_path)
     source_tensor = TF.to_tensor(source_canvas)
     target_tensor = TF.to_tensor(target_canvas)
-    mask_tensor = (TF.to_tensor(mask_canvas) >= 0.5).float()
     rectangular_mask = Image.new("L", size, 0)
     mask_box = mask_canvas.getbbox()
     if mask_box is not None:
@@ -130,7 +129,7 @@ def prepare_conditions(
     sample = {
         "source_image": source_tensor.mul(2).sub(1),
         "target_image": target_tensor.mul(2).sub(1),
-        "mask": mask_tensor,
+        "mask": rectangular_mask_tensor,
         "masked_image": (
             source_tensor * (1.0 - rectangular_mask_tensor)
         ).mul(2).sub(1),

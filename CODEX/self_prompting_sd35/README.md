@@ -13,8 +13,8 @@ configuration:
   Only this stage constructs and VAE-encodes the original source-text crop as
   the visual style prompt.
 
-In both modes, `mask_s` constructs the masked source and is an explicit
-spatial condition for MMDiT, not a loss weight. The target string is rendered
+In both modes, the tight rectangle around `mask_s` constructs the masked source
+and is the explicit spatial condition for MMDiT, not a loss weight. The target string is rendered
 as the glyph prompt and encoded by T5. Cooldown filters the two equal-text rows
 in the 200k dataset, leaving 199,998 different-glyph pairs; `mask_t` is not
 loaded. Both stages use ordinary full-latent mean squared error, with no

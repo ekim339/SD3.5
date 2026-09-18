@@ -65,7 +65,7 @@ def test_training_uses_source_reconstruction():
     assert render_glyph("target", (128, 64)).getbbox() is not None
 
 
-def test_masked_image_uses_tight_rectangle_without_changing_model_mask():
+def test_masked_image_and_model_mask_use_same_tight_rectangle():
     source = Image.new("RGB", (8, 8), "red")
     mask = Image.new("L", source.size, 0)
     mask.putpixel((2, 2), 255)
@@ -75,11 +75,10 @@ def test_masked_image_uses_tight_rectangle_without_changing_model_mask():
         source, mask, "target", 8, include_style_prompt=False
     )
 
-    # The sparse mask remains the spatial condition passed to the model.
-    assert sample["mask"].sum().item() == 2
-    assert sample["mask"][0, 3, 3].item() == 0
-
-    # masked_image instead removes the entire tight bbox: [2:6, 2:5].
+    # Both conditions use the tight bbox: [2:6, 2:5].
+    assert sample["mask"].sum().item() == 12
+    assert torch.all(sample["mask"][:, 2:5, 2:6] == 1)
+    assert sample["mask"][0, 0, 0].item() == 0
     assert torch.all(sample["masked_image"][:, 2:5, 2:6] == -1)
     assert torch.equal(
         sample["masked_image"][:, 0, 0], torch.tensor([1.0, -1.0, -1.0])
